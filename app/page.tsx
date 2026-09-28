@@ -23,6 +23,7 @@ import { ProfileView } from "@/components/ProfileView";
 import { AddJobModal } from "@/components/AddJobModal";
 import { JobDetailModal } from "@/components/JobDetailModal";
 import { SettingsModal } from "@/components/SettingsModal";
+import { LiveScannerModal } from "@/components/LiveScannerModal";
 import { 
   Sparkles, 
   CheckCircle2, 
@@ -32,7 +33,8 @@ import {
   Users, 
   Plus, 
   Info,
-  ArrowRight
+  ArrowRight,
+  Search
 } from "lucide-react";
 
 export default function Home() {
@@ -43,6 +45,7 @@ export default function Home() {
   const [activeTab, setActiveTab] = useState<"kanban" | "table" | "profile">("kanban");
   const [selectedJob, setSelectedJob] = useState<JobPosting | null>(null);
   const [isAddJobOpen, setIsAddJobOpen] = useState(false);
+  const [isLiveScannerOpen, setIsLiveScannerOpen] = useState(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isMounted, setIsMounted] = useState(false);
 
@@ -89,6 +92,16 @@ export default function Home() {
     const updated = saveJob(newJob);
     setJobs(updated);
     setSelectedJob(newJob);
+  };
+
+  const handleImportLiveJobs = (newJobs: JobPosting[]) => {
+    const updated = [...newJobs, ...jobs];
+    saveJobs(updated);
+    setJobs(updated);
+    setActiveTab("kanban");
+    if (newJobs.length > 0) {
+      setSelectedJob(newJobs[0]);
+    }
   };
 
   const handleUpdateStatus = (id: string, status: JobStatus) => {
@@ -171,6 +184,7 @@ export default function Home() {
         activeTab={activeTab}
         setActiveTab={setActiveTab}
         onOpenAddJob={() => setIsAddJobOpen(true)}
+        onOpenLiveScanner={() => setIsLiveScannerOpen(true)}
         onOpenSettings={() => setIsSettingsOpen(true)}
         onExportCsv={() => exportJobsToCsv(jobs)}
         jobCount={jobs.length}
@@ -243,7 +257,7 @@ export default function Home() {
         {/* View Switcher Output */}
         {activeTab === "kanban" && (
           <div className="space-y-4">
-            <div className="flex items-center justify-between">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
               <div>
                 <h2 className="text-base font-bold text-slate-900">
                   İş Arama & Başvuru Boru Hattı (Pipeline)
@@ -252,13 +266,22 @@ export default function Home() {
                   İlanları kartlara tıklayarak detaylı analiz edebilir, sağ alt butondan sonraki aşamaya taşıyabilirsiniz.
                 </p>
               </div>
-              <button
-                onClick={() => setIsAddJobOpen(true)}
-                className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold bg-indigo-50 text-indigo-700 hover:bg-indigo-100 rounded-xl border border-indigo-100 transition-colors"
-              >
-                <Plus className="w-3.5 h-3.5" />
-                <span>Hızlı İlan Ekle</span>
-              </button>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => setIsLiveScannerOpen(true)}
+                  className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold bg-indigo-50 text-indigo-700 hover:bg-indigo-100 rounded-xl border border-indigo-200 transition-colors"
+                >
+                  <Search className="w-3.5 h-3.5" />
+                  <span>Canlı Ağları Tara</span>
+                </button>
+                <button
+                  onClick={() => setIsAddJobOpen(true)}
+                  className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold bg-slate-900 text-white hover:bg-slate-800 rounded-xl transition-colors"
+                >
+                  <Plus className="w-3.5 h-3.5" />
+                  <span>Manuel İlan Ekle</span>
+                </button>
+              </div>
             </div>
 
             <KanbanBoard
@@ -318,6 +341,15 @@ export default function Home() {
         isOpen={isAddJobOpen}
         onClose={() => setIsAddJobOpen(false)}
         onAddJob={handleAddJob}
+      />
+
+      <LiveScannerModal
+        isOpen={isLiveScannerOpen}
+        onClose={() => setIsLiveScannerOpen(false)}
+        profile={profile}
+        settings={settings}
+        existingUrls={jobs.map(j => j.sourceUrl || "").filter(Boolean)}
+        onImportJobs={handleImportLiveJobs}
       />
 
       <JobDetailModal

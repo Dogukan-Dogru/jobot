@@ -10,7 +10,9 @@ import {
   Settings as SettingsIcon, 
   User, 
   LayoutGrid, 
-  Table as TableIcon
+  Table as TableIcon,
+  Search,
+  Radar
 } from "lucide-react";
 
 interface NavbarProps {
@@ -18,6 +20,7 @@ interface NavbarProps {
   activeTab: "kanban" | "table" | "profile";
   setActiveTab: (tab: "kanban" | "table" | "profile") => void;
   onOpenAddJob: () => void;
+  onOpenLiveScanner: () => void;
   onOpenSettings: () => void;
   onExportCsv: () => void;
   jobCount: number;
@@ -28,6 +31,7 @@ export const Navbar: React.FC<NavbarProps> = ({
   activeTab,
   setActiveTab,
   onOpenAddJob,
+  onOpenLiveScanner,
   onOpenSettings,
   onExportCsv,
   jobCount
@@ -69,7 +73,7 @@ export const Navbar: React.FC<NavbarProps> = ({
             >
               <LayoutGrid className="w-4 h-4" />
               <span>Pano (Kanban)</span>
-              <span className="ml-1 text-xs px-1.5 py-0.2 rounded-full bg-slate-100 text-slate-600">
+              <span className="ml-1 text-xs px-1.5 py-0.2 rounded-full bg-slate-100 text-slate-600 font-bold">
                 {jobCount}
               </span>
             </button>
@@ -98,46 +102,45 @@ export const Navbar: React.FC<NavbarProps> = ({
           </div>
 
           {/* Right Action buttons */}
-          <div className="flex items-center gap-2 sm:gap-3">
+          <div className="flex items-center gap-2 sm:gap-2.5">
             
-            {/* Active profile chip */}
+            {/* Live Scanner CTA Button */}
             <button
-              onClick={() => setActiveTab("profile")}
-              className="hidden lg:flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-medium bg-indigo-50/70 border border-indigo-100 text-indigo-800 hover:bg-indigo-100/70 transition-colors"
-              title="Aday profilini görüntüle ve düzenle"
+              onClick={onOpenLiveScanner}
+              className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-linear-to-r from-sky-500 via-indigo-600 to-indigo-700 hover:from-sky-600 hover:to-indigo-800 active:scale-95 text-white font-bold text-xs sm:text-sm shadow-md shadow-indigo-500/20 transition-all cursor-pointer"
+              title="RemoteOK, Jobicy ve Avrupa ağlarından en yeni ilanları otomatik tara"
             >
-              <div className="w-2 h-2 rounded-full bg-indigo-500"></div>
-              <span>{profile.name}</span>
-              <span className="text-indigo-400">•</span>
-              <span className="text-indigo-600">{profile.targetTitle.split("&")[0].trim()}</span>
+              <Search className="w-3.5 h-3.5 sm:w-4 sm:h-4 stroke-[2.5]" />
+              <span>Canlı İlanları Tara</span>
             </button>
 
             {/* Export CSV button */}
             <button
               onClick={onExportCsv}
-              className="p-2 sm:px-3 sm:py-2 text-slate-700 hover:text-indigo-600 bg-slate-50 hover:bg-slate-100 border border-slate-200 rounded-xl text-xs sm:text-sm font-medium flex items-center gap-1.5 transition-colors"
+              className="p-2 sm:px-2.5 sm:py-2 text-slate-700 hover:text-indigo-600 bg-slate-50 hover:bg-slate-100 border border-slate-200 rounded-xl text-xs sm:text-sm font-medium flex items-center gap-1.5 transition-colors"
               title="Google Sheets & Excel için CSV İndir"
             >
               <Download className="w-4 h-4" />
-              <span className="hidden sm:inline">Excel/Sheets</span>
+              <span className="hidden lg:inline">CSV İndir</span>
             </button>
 
             {/* Settings button */}
             <button
               onClick={onOpenSettings}
-              className="p-2 sm:p-2.5 text-slate-600 hover:text-slate-900 bg-slate-50 hover:bg-slate-100 border border-slate-200 rounded-xl transition-colors"
+              className="p-2 sm:p-2 text-slate-600 hover:text-slate-900 bg-slate-50 hover:bg-slate-100 border border-slate-200 rounded-xl transition-colors"
               title="Uygulama ve Yapay Zeka Ayarları"
             >
               <SettingsIcon className="w-4 h-4" />
             </button>
 
-            {/* Primary Add Job CTA */}
+            {/* Manual Add Job CTA */}
             <button
               onClick={onOpenAddJob}
-              className="flex items-center gap-2 px-3.5 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 active:scale-95 text-white font-semibold text-xs sm:text-sm shadow-md shadow-indigo-600/25 transition-all"
+              className="p-2 sm:px-3 sm:py-2 rounded-xl bg-slate-900 hover:bg-slate-800 active:scale-95 text-white font-semibold text-xs sm:text-sm shadow-xs transition-all flex items-center gap-1.5"
+              title="Manuel veya Linkle İlan Ekle"
             >
               <Plus className="w-4 h-4 stroke-[2.5]" />
-              <span>İlan Ekle</span>
+              <span className="hidden sm:inline">İlan Ekle</span>
             </button>
 
           </div>
@@ -149,7 +152,7 @@ export const Navbar: React.FC<NavbarProps> = ({
           <button
             onClick={() => setActiveTab("kanban")}
             className={`flex items-center gap-1.5 px-3 py-1 text-xs font-medium rounded-lg ${
-              activeTab === "kanban" ? "bg-indigo-50 text-indigo-700" : "text-slate-600"
+              activeTab === "kanban" ? "bg-indigo-50 text-indigo-700 font-bold" : "text-slate-600"
             }`}
           >
             <LayoutGrid className="w-3.5 h-3.5" />
@@ -158,7 +161,7 @@ export const Navbar: React.FC<NavbarProps> = ({
           <button
             onClick={() => setActiveTab("table")}
             className={`flex items-center gap-1.5 px-3 py-1 text-xs font-medium rounded-lg ${
-              activeTab === "table" ? "bg-indigo-50 text-indigo-700" : "text-slate-600"
+              activeTab === "table" ? "bg-indigo-50 text-indigo-700 font-bold" : "text-slate-600"
             }`}
           >
             <TableIcon className="w-3.5 h-3.5" />
@@ -167,7 +170,7 @@ export const Navbar: React.FC<NavbarProps> = ({
           <button
             onClick={() => setActiveTab("profile")}
             className={`flex items-center gap-1.5 px-3 py-1 text-xs font-medium rounded-lg ${
-              activeTab === "profile" ? "bg-indigo-50 text-indigo-700" : "text-slate-600"
+              activeTab === "profile" ? "bg-indigo-50 text-indigo-700 font-bold" : "text-slate-600"
             }`}
           >
             <User className="w-3.5 h-3.5" />
