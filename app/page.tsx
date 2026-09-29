@@ -96,6 +96,24 @@ export default function Home() {
     }
   }, [jobs]);
 
+  // Apply dark mode class to HTML documentElement
+  useEffect(() => {
+    if (!isMounted) return;
+    const isDark =
+      settings.theme === "dark" ||
+      (settings.theme === "system" &&
+        typeof window !== "undefined" &&
+        window.matchMedia("(prefers-color-scheme: dark)").matches);
+
+    document.documentElement.classList.toggle("dark", isDark);
+  }, [settings.theme, isMounted]);
+
+  const handleToggleTheme = () => {
+    const nextTheme: "light" | "dark" = settings.theme === "dark" ? "light" : "dark";
+    const updated: AppSettings = { ...settings, theme: nextTheme };
+    handleSaveSettings(updated);
+  };
+
   // Handlers
   const handleAddJob = async (
     jobData: Omit<JobPosting, "id" | "dateAdded" | "status">,
@@ -234,7 +252,7 @@ export default function Home() {
   if (!isMounted) return null;
 
   return (
-    <div className="min-h-screen bg-slate-50 flex flex-col font-sans text-slate-900 selection:bg-indigo-100 selection:text-indigo-900">
+    <div className="min-h-screen bg-slate-50 dark:bg-slate-950 flex flex-col font-sans text-slate-900 dark:text-slate-100 selection:bg-indigo-100 dark:selection:bg-indigo-900/60 selection:text-indigo-900 dark:selection:text-indigo-200 transition-colors">
       
       {/* Global Navbar */}
       <Navbar
@@ -246,6 +264,8 @@ export default function Home() {
         onOpenSettings={() => setIsSettingsOpen(true)}
         onExportCsv={() => exportJobsToCsv(jobs)}
         jobCount={jobs.length}
+        theme={settings.theme}
+        onToggleTheme={handleToggleTheme}
       />
 
       {/* Main Container */}
@@ -254,58 +274,58 @@ export default function Home() {
         {/* Top KPI & Intelligence Overview Strip */}
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 sm:gap-4">
           
-          <div className="bg-white p-4 rounded-2xl border border-slate-200/80 shadow-2xs flex items-center justify-between">
+          <div className="bg-white dark:bg-slate-900 p-4 rounded-2xl border border-slate-200/80 dark:border-slate-800 shadow-2xs flex items-center justify-between">
             <div>
-              <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider block">
+              <span className="text-[11px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider block">
                 Başvurulacak (APPLY)
               </span>
-              <span className="text-2xl font-black text-emerald-600 mt-0.5 block">
+              <span className="text-2xl font-black text-emerald-600 dark:text-emerald-400 mt-0.5 block">
                 {applyCount}
               </span>
             </div>
-            <div className="w-10 h-10 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center font-bold">
+            <div className="w-10 h-10 rounded-xl bg-emerald-50 dark:bg-emerald-950/50 text-emerald-600 dark:text-emerald-400 flex items-center justify-center font-bold">
               <CheckCircle2 className="w-5 h-5" />
             </div>
           </div>
 
-          <div className="bg-white p-4 rounded-2xl border border-slate-200/80 shadow-2xs flex items-center justify-between">
+          <div className="bg-white dark:bg-slate-900 p-4 rounded-2xl border border-slate-200/80 dark:border-slate-800 shadow-2xs flex items-center justify-between">
             <div>
-              <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider block">
+              <span className="text-[11px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider block">
                 İncelenecek (CONSIDER)
               </span>
-              <span className="text-2xl font-black text-amber-500 mt-0.5 block">
+              <span className="text-2xl font-black text-amber-500 dark:text-amber-400 mt-0.5 block">
                 {considerCount}
               </span>
             </div>
-            <div className="w-10 h-10 rounded-xl bg-amber-50 text-amber-600 flex items-center justify-center font-bold">
+            <div className="w-10 h-10 rounded-xl bg-amber-50 dark:bg-amber-950/50 text-amber-600 dark:text-amber-400 flex items-center justify-center font-bold">
               <AlertTriangle className="w-5 h-5" />
             </div>
           </div>
 
-          <div className="bg-white p-4 rounded-2xl border border-slate-200/80 shadow-2xs flex items-center justify-between">
+          <div className="bg-white dark:bg-slate-900 p-4 rounded-2xl border border-slate-200/80 dark:border-slate-800 shadow-2xs flex items-center justify-between">
             <div>
-              <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider block">
+              <span className="text-[11px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider block">
                 Elenenler (SKIP)
               </span>
-              <span className="text-2xl font-black text-rose-600 mt-0.5 block">
+              <span className="text-2xl font-black text-rose-600 dark:text-rose-400 mt-0.5 block">
                 {skipCount}
               </span>
             </div>
-            <div className="w-10 h-10 rounded-xl bg-rose-50 text-rose-600 flex items-center justify-center font-bold">
+            <div className="w-10 h-10 rounded-xl bg-rose-50 dark:bg-rose-950/50 text-rose-600 dark:text-rose-400 flex items-center justify-center font-bold">
               <XCircle className="w-5 h-5" />
             </div>
           </div>
 
-          <div className="bg-white p-4 rounded-2xl border border-slate-200/80 shadow-2xs flex items-center justify-between">
+          <div className="bg-white dark:bg-slate-900 p-4 rounded-2xl border border-slate-200/80 dark:border-slate-800 shadow-2xs flex items-center justify-between">
             <div>
-              <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider block">
+              <span className="text-[11px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider block">
                 Başvuruldu / Mülakat
               </span>
-              <span className="text-2xl font-black text-indigo-600 mt-0.5 block">
+              <span className="text-2xl font-black text-indigo-600 dark:text-indigo-400 mt-0.5 block">
                 {appliedCount}
               </span>
             </div>
-            <div className="w-10 h-10 rounded-xl bg-indigo-50 text-indigo-600 flex items-center justify-center font-bold">
+            <div className="w-10 h-10 rounded-xl bg-indigo-50 dark:bg-indigo-950/50 text-indigo-600 dark:text-indigo-400 flex items-center justify-center font-bold">
               <Send className="w-5 h-5" />
             </div>
           </div>
@@ -317,24 +337,24 @@ export default function Home() {
           <div className="space-y-4">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
               <div>
-                <h2 className="text-base font-bold text-slate-900">
+                <h2 className="text-base font-bold text-slate-900 dark:text-white">
                   İş Arama & Başvuru Boru Hattı (Pipeline)
                 </h2>
-                <p className="text-xs text-slate-500">
-                  İlanları kartlara tıklayarak detaylı analiz edebilir, sağ alt butondan sonraki aşamaya taşıyabilirsiniz.
+                <p className="text-xs text-slate-500 dark:text-slate-400">
+                  Kartları sürükleyip bırakarak aşamaları değiştirebilir veya tıklayarak detaylı AI analizini inceleyebilirsiniz.
                 </p>
               </div>
               <div className="flex items-center gap-2">
                 <button
                   onClick={() => setIsLiveScannerOpen(true)}
-                  className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold bg-indigo-50 text-indigo-700 hover:bg-indigo-100 rounded-xl border border-indigo-200 transition-colors"
+                  className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold bg-indigo-50 dark:bg-indigo-950/50 text-indigo-700 dark:text-indigo-300 hover:bg-indigo-100 dark:hover:bg-indigo-900/50 rounded-xl border border-indigo-200 dark:border-indigo-800 transition-colors cursor-pointer"
                 >
                   <Search className="w-3.5 h-3.5" />
                   <span>Canlı Ağları Tara</span>
                 </button>
                 <button
                   onClick={() => setIsAddJobOpen(true)}
-                  className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold bg-slate-900 text-white hover:bg-slate-800 rounded-xl transition-colors"
+                  className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold bg-slate-900 dark:bg-indigo-600 text-white hover:bg-slate-800 dark:hover:bg-indigo-500 rounded-xl transition-colors cursor-pointer"
                 >
                   <Plus className="w-3.5 h-3.5" />
                   <span>Manuel İlan Ekle</span>
