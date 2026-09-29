@@ -96,9 +96,31 @@ export function runHeuristicAnalysis(job: JobPosting, profile: MasterProfile): J
   
   // 1. Role classification
   let roleType: JobAnalysis["roleType"] = "PRODUCT";
-  if (text.includes("technical project manager") || text.includes("project manager") || text.includes("delivery manager")) {
-    roleType = text.includes("product") ? "HYBRID" : "PROJECT";
-  } else if (text.includes("product manager") || text.includes("product owner")) {
+  const isProject = 
+    text.includes("technical project manager") || 
+    text.includes("project manager") || 
+    text.includes("delivery manager") || 
+    text.includes("proje yöneticisi") || 
+    text.includes("proje müdürü") ||
+    text.includes("proje lideri") ||
+    text.includes("it project manager") ||
+    text.includes("agile project manager") ||
+    text.includes("program manager") ||
+    text.includes("scrum master") ||
+    text.includes("tpm");
+
+  const isProduct = 
+    text.includes("product manager") || 
+    text.includes("product owner") || 
+    text.includes("ürün yöneticisi") || 
+    text.includes("ürün müdürü") ||
+    text.includes("apm");
+
+  if (isProject && isProduct) {
+    roleType = "HYBRID";
+  } else if (isProject) {
+    roleType = "PROJECT";
+  } else {
     roleType = "PRODUCT";
   }
 
@@ -235,6 +257,9 @@ export function runHeuristicAnalysis(job: JobPosting, profile: MasterProfile): J
   }
   if (text.includes("api") || text.includes("integration") || text.includes("entegrasyon")) {
     strongMatches.push("REST API ve backend teknik gereksinim analizi");
+  }
+  if (isProject) {
+    strongMatches.push("Agile / Scrum teslimat koordinasyonu, sprint takvimi ve teknik bağımlılık yönetimi");
   }
 
   // Transferable

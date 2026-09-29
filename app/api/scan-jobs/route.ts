@@ -17,8 +17,8 @@ function stripHtml(html: string): string {
     .trim();
 }
 
-// Strict Whitelist & Blacklist filter to eliminate Software Engineer, Account Manager, Designer, etc.
-function isValidTargetRole(title: string): boolean {
+// Strict Whitelist & Blacklist filter for PM and Project Manager roles
+function isValidTargetRole(title: string, roleScope: string[] = ["product", "project"]): boolean {
   const t = title.toLowerCase().trim();
 
   // 1. Strict Blacklist (Negative keywords - reject immediately)
@@ -40,17 +40,30 @@ function isValidTargetRole(title: string): boolean {
     }
   }
 
-  // 2. Whitelist (Must match legitimate target roles)
-  const whitelist = [
-    "product manager", "product owner", "project manager", "technical product",
-    "technical project", "delivery manager", "program manager", "product lead",
-    "head of product", "vp of product", "scrum master", "product operations",
-    "ürün yöneticisi", "ürün müdürü", "proje yöneticisi", "proje müdürü",
-    "associate product manager", "senior product manager", "lead product manager",
-    "junior product manager", "apm", "tpm", "group product manager"
+  // 2. Whitelist for Product Manager roles
+  const productRoles = [
+    "product manager", "product owner", "technical product",
+    "product lead", "head of product", "vp of product", "product operations",
+    "ürün yöneticisi", "ürün müdürü", "associate product manager", 
+    "senior product manager", "lead product manager", "junior product manager",
+    "apm", "group product manager"
   ];
 
-  return whitelist.some(pos => t.includes(pos));
+  // 3. Whitelist for Project Manager roles
+  const projectRoles = [
+    "project manager", "technical project", "delivery manager", "program manager",
+    "scrum master", "proje yöneticisi", "proje müdürü", "proje lideri",
+    "it project manager", "agile project manager", "senior project manager",
+    "technical delivery manager", "project lead", "tpm"
+  ];
+
+  const matchProduct = productRoles.some(pos => t.includes(pos));
+  const matchProject = projectRoles.some(pos => t.includes(pos));
+
+  if (roleScope.includes("product") && matchProduct) return true;
+  if (roleScope.includes("project") && matchProject) return true;
+
+  return false;
 }
 
 const BROWSER_HEADERS = {
@@ -64,12 +77,14 @@ export async function POST(req: NextRequest) {
     const { 
       profile, 
       existingUrls = [],
-      sources = ["linkedin", "kariyer", "remoteok", "europe"]
+      sources = ["linkedin", "kariyer", "remoteok", "europe"],
+      roleScope = ["product", "project"]
     }: { 
       profile: MasterProfile; 
       settings?: AppSettings; 
       existingUrls: string[];
       sources?: string[];
+      roleScope?: string[];
     } = await req.json();
 
     const fetchedJobs: JobPosting[] = [];
@@ -78,14 +93,26 @@ export async function POST(req: NextRequest) {
     const tasks: Promise<void>[] = [];
 
     // -------------------------------------------------------------
-    // SOURCE 1: LinkedIn Guest Job Search API (Parallel TR & Global)
+    // SOURCE 1: LinkedIn Guest Job Search API (Both Product & Project)
     // -------------------------------------------------------------
     if (sources.includes("linkedin")) {
       const fetchLinkedIn = async () => {
-        const liUrls = [
-          "https://www.linkedin.com/jobs-guest/jobs/api/seeMoreJobPostings/search?keywords=Product%20Manager&location=Turkey&start=0",
-          "https://www.linkedin.com/jobs-guest/jobs/api/seeMoreJobPostings/search?keywords=Product%20Manager&location=Worldwide&f_WT=2&start=0"
-        ];
+        const liUrls: string[] = [];
+
+        if (roleScope.includes("product")) {
+          liUrls.push(
+            "https://www.linkedin.com/jobs-guest/jobs/api/seeMoreJobPostings/search?keywords=Product%20Manager&location=Turkey&start=0",
+            "https://www.linkedin.com/jobs-guest/jobs/api/seeMoreJobPostings/search?keywords=Product%20Manager&location=Worldwide&f_WT=2&start=0"
+          );
+        }
+
+        if (roleScope.includes("project")) {
+          liUrls.push(
+            "https://www.linkedin.com/jobs-guest/jobs/api/seeMoreJobPostings/search?keywords=Project%20Manager&location=Turkey&start=0",
+            "https://www.linkedin.com/jobs-guest/jobs/api/seeMoreJobPostings/search?keywords=Technical%20Project%20Manager&location=Worldwide&f_WT=2&start=0",
+            "https://www.linkedin.com/jobs-guest/jobs/api/seeMoreJobPostings/search?keywords=Project%20Manager&location=Worldwide&f_WT=2&start=0"
+          );
+        }
 
         const subFetches = liUrls.map(async (liUrl) => {
           try {
@@ -109,7 +136,7 @@ export async function POST(req: NextRequest) {
 
             for (let i = 0; i < titles.length; i++) {
               const title = titles[i];
-              if (!isValidTargetRole(title)) continue; // STRICT FILTER
+              if (!isValidTargetRole(title, roleScope)) continue; // STRICT FILTER
 
               const url = links[i] || "";
               const urlKey = url.toLowerCase().trim();
@@ -151,67 +178,78 @@ export async function POST(req: NextRequest) {
     }
 
     // -------------------------------------------------------------
-    // SOURCE 2: Kariyer.net Live Search (Türkiye)
+    // SOURCE 2: Kariyer.net Live Search (Product & Proje Yöneticisi)
     // -------------------------------------------------------------
     if (sources.includes("kariyer")) {
       const fetchKariyer = async () => {
-        try {
-          const kariyerUrl = "https://www.kariyer.net/is-ilanlari?kw=product%20manager";
-          const kRes = await fetch(kariyerUrl, {
-            headers: BROWSER_HEADERS,
-            signal: AbortSignal.timeout(5000)
-          });
-
-          if (!kRes.ok) return;
-
-          const html = await kRes.text();
-          const cardRegex = /<a[^>]*href="(\/is-ilani\/[^"]+)"[^>]*>[\s\S]*?<span[^>]*data-test="ad-card-title"[^>]*>([\s\S]*?)<\/span>/gi;
-          const matches = [...html.matchAll(cardRegex)];
-
-          for (const m of matches) {
-            const rawUrl = "https://www.kariyer.net" + m[1];
-            const title = stripHtml(m[2]);
-
-            if (!isValidTargetRole(title)) continue;
-            const urlKey = rawUrl.toLowerCase().trim();
-            if (seenUrls.has(urlKey)) continue;
-            seenUrls.add(urlKey);
-
-            const slugParts = m[1].split("-");
-            const companyNameGuess = slugParts.length > 2 
-              ? slugParts.slice(1, -2).join(" ").toUpperCase() 
-              : "Kariyer.net Şirketi";
-
-            const newJob: JobPosting = {
-              id: `live-kariyer-${crypto.randomUUID()}`,
-              title,
-              company: companyNameGuess.substring(0, 30),
-              location: "İstanbul / Türkiye",
-              country: "Türkiye",
-              workModel: "hybrid",
-              platform: "kariyer",
-              sourceUrl: rawUrl,
-              rawDescription: `Kariyer.net üzerinden yayınlanan ${title} ilanı.\nŞirket: ${companyNameGuess}.\nBaşvuru ve detaylar için Kariyer.net bağlantısını kullanabilirsiniz.`,
-              dateAdded: new Date().toISOString().split("T")[0],
-              status: "new"
-            };
-
-            newJob.analysis = runHeuristicAnalysis(newJob, profile);
-            if (newJob.analysis.finalVerdict === "APPLY") {
-              newJob.status = "to_apply";
-            }
-            fetchedJobs.push(newJob);
-          }
-        } catch (err) {
-          console.warn("Kariyer.net fetch failed:", err);
+        const kariyerUrls: string[] = [];
+        if (roleScope.includes("product")) {
+          kariyerUrls.push("https://www.kariyer.net/is-ilanlari?kw=product%20manager");
         }
+        if (roleScope.includes("project")) {
+          kariyerUrls.push("https://www.kariyer.net/is-ilanlari?kw=proje%20yoneticisi");
+        }
+
+        const subFetches = kariyerUrls.map(async (kariyerUrl) => {
+          try {
+            const kRes = await fetch(kariyerUrl, {
+              headers: BROWSER_HEADERS,
+              signal: AbortSignal.timeout(5000)
+            });
+
+            if (!kRes.ok) return;
+
+            const html = await kRes.text();
+            const cardRegex = /<a[^>]*href="(\/is-ilani\/[^"]+)"[^>]*>[\s\S]*?<span[^>]*data-test="ad-card-title"[^>]*>([\s\S]*?)<\/span>/gi;
+            const matches = [...html.matchAll(cardRegex)];
+
+            for (const m of matches) {
+              const rawUrl = "https://www.kariyer.net" + m[1];
+              const title = stripHtml(m[2]);
+
+              if (!isValidTargetRole(title, roleScope)) continue;
+              const urlKey = rawUrl.toLowerCase().trim();
+              if (seenUrls.has(urlKey)) continue;
+              seenUrls.add(urlKey);
+
+              const slugParts = m[1].split("-");
+              const companyNameGuess = slugParts.length > 2 
+                ? slugParts.slice(1, -2).join(" ").toUpperCase() 
+                : "Kariyer.net Şirketi";
+
+              const newJob: JobPosting = {
+                id: `live-kariyer-${crypto.randomUUID()}`,
+                title,
+                company: companyNameGuess.substring(0, 30),
+                location: "İstanbul / Türkiye",
+                country: "Türkiye",
+                workModel: "hybrid",
+                platform: "kariyer",
+                sourceUrl: rawUrl,
+                rawDescription: `Kariyer.net üzerinden yayınlanan ${title} ilanı.\nŞirket: ${companyNameGuess}.\nBaşvuru ve detaylar için Kariyer.net bağlantısını kullanabilirsiniz.`,
+                dateAdded: new Date().toISOString().split("T")[0],
+                status: "new"
+              };
+
+              newJob.analysis = runHeuristicAnalysis(newJob, profile);
+              if (newJob.analysis.finalVerdict === "APPLY") {
+                newJob.status = "to_apply";
+              }
+              fetchedJobs.push(newJob);
+            }
+          } catch (err) {
+            console.warn("Kariyer.net sub-fetch failed:", err);
+          }
+        });
+
+        await Promise.allSettled(subFetches);
       };
 
       tasks.push(fetchKariyer());
     }
 
     // -------------------------------------------------------------
-    // SOURCE 3: RemoteOK API (Public JSON API)
+    // SOURCE 3: RemoteOK API (Public JSON API - PM & Project Manager)
     // -------------------------------------------------------------
     if (sources.includes("remoteok")) {
       const fetchRemoteOK = async () => {
@@ -226,12 +264,11 @@ export async function POST(req: NextRequest) {
           const data = await res.json();
           if (!Array.isArray(data)) return;
 
-          // data[0] is often legal/disclaimer object, items start at 1
           const items = data.slice(1);
 
           for (const item of items) {
             const title = item.position || "";
-            if (!isValidTargetRole(title)) continue;
+            if (!isValidTargetRole(title, roleScope)) continue;
 
             const url = item.url || (item.id ? `https://remoteok.com/remote-jobs/${item.id}` : "");
             const urlKey = url.toLowerCase().trim();
@@ -274,15 +311,21 @@ export async function POST(req: NextRequest) {
     }
 
     // -------------------------------------------------------------
-    // SOURCE 4: Jobicy & Remotive (Europe & Global Remote)
+    // SOURCE 4: Jobicy & Remotive (Europe & Global PM / Project Management)
     // -------------------------------------------------------------
     if (sources.includes("europe")) {
       const fetchEurope = async () => {
-        const subFetches = [
-          // Jobicy
-          (async () => {
+        const subFetches: Promise<void>[] = [];
+
+        // Jobicy queries
+        const jobicyTags: string[] = [];
+        if (roleScope.includes("product")) jobicyTags.push("product");
+        if (roleScope.includes("project")) jobicyTags.push("project-management");
+
+        for (const tag of jobicyTags) {
+          subFetches.push((async () => {
             try {
-              const res = await fetch("https://jobicy.com/api/v2/remote-jobs?count=20&tag=product", {
+              const res = await fetch(`https://jobicy.com/api/v2/remote-jobs?count=20&tag=${tag}`, {
                 headers: BROWSER_HEADERS,
                 signal: AbortSignal.timeout(5000)
               });
@@ -292,7 +335,7 @@ export async function POST(req: NextRequest) {
 
               for (const item of jobs) {
                 const title = item.jobTitle || "";
-                if (!isValidTargetRole(title)) continue;
+                if (!isValidTargetRole(title, roleScope)) continue;
 
                 const url = item.url || "";
                 const urlKey = url.toLowerCase().trim();
@@ -323,14 +366,20 @@ export async function POST(req: NextRequest) {
                 fetchedJobs.push(newJob);
               }
             } catch (e) {
-              console.warn("Jobicy sub-fetch failed:", e);
+              console.warn(`Jobicy (${tag}) sub-fetch failed:`, e);
             }
-          })(),
+          })());
+        }
 
-          // Remotive
-          (async () => {
+        // Remotive queries
+        const remotiveCats: string[] = [];
+        if (roleScope.includes("product")) remotiveCats.push("product");
+        if (roleScope.includes("project")) remotiveCats.push("project-management");
+
+        for (const cat of remotiveCats) {
+          subFetches.push((async () => {
             try {
-              const res = await fetch("https://remotive.com/api/remote-jobs?category=product", {
+              const res = await fetch(`https://remotive.com/api/remote-jobs?category=${cat}`, {
                 headers: BROWSER_HEADERS,
                 signal: AbortSignal.timeout(5000)
               });
@@ -340,7 +389,7 @@ export async function POST(req: NextRequest) {
 
               for (const item of jobs) {
                 const title = item.title || "";
-                if (!isValidTargetRole(title)) continue;
+                if (!isValidTargetRole(title, roleScope)) continue;
 
                 const url = item.url || "";
                 const urlKey = url.toLowerCase().trim();
@@ -372,10 +421,10 @@ export async function POST(req: NextRequest) {
                 fetchedJobs.push(newJob);
               }
             } catch (e) {
-              console.warn("Remotive sub-fetch failed:", e);
+              console.warn(`Remotive (${cat}) sub-fetch failed:`, e);
             }
-          })()
-        ];
+          })());
+        }
 
         await Promise.allSettled(subFetches);
       };

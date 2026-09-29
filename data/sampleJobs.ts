@@ -243,5 +243,141 @@ Genel Nitelikler:
       oneSentenceReason: "Pozisyonun beklediği SoftPOS, üye işyeri ve yönlendirme deneyimleri adayın mevcut uzmanlık alanıyla eksiksiz örtüşüyor.",
       analyzedAt: "2026-09-28T14:25:00Z"
     }
+  },
+  {
+    id: "sample-job-4",
+    title: "Senior Technical Project Manager - Payment Gateway & SDK Integrations",
+    company: "OmniPay Global Systems",
+    location: "Worldwide Remote (EMEA / Türkiye)",
+    country: "Remote",
+    workModel: "remote",
+    salary: "$85,000 - $110,000 / year",
+    sourceUrl: "https://linkedin.com/jobs/view/sample-omnipay-project-manager",
+    platform: "linkedin",
+    rawDescription: `OmniPay Global is hiring a Senior Technical Project Manager to lead payment gateway integrations, mobile POS SDK release cycles, and client onboarding milestones.
+
+About the Role:
+As a Technical Project Manager, you will work between client engineering teams, product managers, and internal developers to orchestrate SDK rollouts, EMVCo compliance audits, and API migrations.
+
+Responsibilities:
+- Coordinate delivery timelines, release sprints, and dependency mapping across distributed engineering squads.
+- Serve as the technical delivery liaison for merchant partners integrating our payment SDK and B2B portal.
+- Facilitate Agile ceremonies (sprint planning, daily standups, retrospectives) in Jira.
+- Track risk registries, milestone deliverables, and test certification sign-offs.
+
+Requirements:
+- 4+ years experience in Technical Project Management, Delivery Management, or Technical PM within fintech/payments.
+- Proven experience with Jira, Confluence, and Agile delivery frameworks.
+- Deep familiarity with payment architectures, SDKs, or banking API integrations.
+- Excellent English communication and stakeholder management.
+
+Arrangement:
+- 100% Remote, open to candidates across EMEA (including Türkiye via Deel/EOR).`,
+    dateAdded: "2026-09-29",
+    status: "to_apply",
+    notes: "Proje yönetimi ve teknik teslimat için mükemmel uyum! SoftPOS/SDK ve Jira deneyimleri doğrudan eşleşiyor.",
+    analysis: {
+      roleType: "PROJECT",
+      eligibility: {
+        canApplyFromTurkey: true,
+        remoteFromTurkey: true,
+        relocationOffered: false,
+        visaSponsorship: "unclear",
+        summary: "EMEA ve Türkiye'den Deel/EOR ile uzaktan çalışmaya açık global remote pozisyon."
+      },
+      strongMatches: [
+        "Fintech ve ödeme SDK'larında 4+ yıl teknik koordinasyon ve teslimat yönetimi",
+        "Jira ve Agile sprint takvimleri, bağımlılık haritalama ve risk yönetimi",
+        "Mastercard SDK ve EMVCo uyum süreçlerinde teknik ekiplerle ortak çalışma",
+        "Kurumsal müşteri entegrasyonu ve teknik paydaş yönetimi"
+      ],
+      transferableExperience: [
+        "Product Manager unvanıyla yürütülen harici entegrasyon takvimi ve teslimat liderliği"
+      ],
+      gaps: [],
+      productFit: [],
+      projectFit: [
+        "Adayın ProvisionPay'deki harici entegrasyon takvimleri, sprint planlaması ve mühendislik bağımlılık yönetimi bu rolün gereksinimleriyle birebir örtüşüyor."
+      ],
+      experienceToEmphasize: [
+        "ProvisionPay'de SoftPOS ve SDK sürüm takvimlerinin yönetimi",
+        "Harici kurumsal müşterilerle yürütülen API entegrasyon teslimatları"
+      ],
+      redFlags: [],
+      interviewRisks: [],
+      finalVerdict: "APPLY",
+      oneSentenceReason: "Teknik proje yönetimi, ödeme SDK teslimatları ve Jira koordinasyonu adayın deneyimiyle güçlü şekilde örtüşüyor; Türkiye'den remote çalışmaya uygun.",
+      analyzedAt: "2026-09-29T15:00:00Z"
+    },
+    applicationPackage: {
+      tailoredCvSummary: "Fintech ve ödeme altyapılarında 4+ yıllık teknik teslimat koordinasyonu, SDK entegrasyonları ve sprint yönetimi deneyimine sahip Technical Project Manager.",
+      tailoredBulletPoints: [
+        {
+          roleFlavor: "Project Manager",
+          bullets: [
+            "SoftPOS ve mobil ödeme SDK'larının harici kurumsal müşterilere entegrasyon takvimlerini ve kritik yol bağımlılıklarını uçtan uca koordine etti.",
+            "Jira üzerinde sprint planlama, backlog önceliklendirme ve sürüm teslimat süreçlerini 10+ kişilik mühendislik ekibiyle yönetti.",
+            "Mastercard ve EMVCo sertifikasyon takvimlerini güvenlik ve test ekipleriyle senkronize ederek zamanında canlıya alınmasını sağladı."
+          ]
+        }
+      ],
+      coverLetterEn: "Dear OmniPay Hiring Team, I am writing to express my strong interest in the Senior Technical Project Manager role...",
+      coverLetterTr: "Sayın OmniPay İşe Alım Ekibi, Senior Technical Project Manager pozisyonuna başvurmaktan memnuniyet duyuyorum...",
+      recruiterMessage: "Hi! I noticed the Technical Project Manager role at OmniPay. Having led SDK integrations and sprint delivery in payment tech for 4+ yrs at ProvisionPay, I'd love to connect!",
+      screeningAnswers: [],
+      generatedAt: "2026-09-29T15:05:00Z"
+    }
+  },
+  {
+    id: "sample-job-5",
+    title: "Kıdemli Proje Yöneticisi (Technical Delivery Manager) - Dijital Bankacılık & POS",
+    company: "AktifTech Bilişim & Finans",
+    location: "İstanbul (Hibrit)",
+    country: "Türkiye",
+    workModel: "hybrid",
+    salary: "140.000 TL - 180.000 TL / ay",
+    sourceUrl: "https://kariyer.net/is-ilani/sample-aktiftech-proje-yoneticisi",
+    platform: "kariyer",
+    rawDescription: `AktifTech bünyesinde Dijital Bankacılık, Sanal POS ve Ödeme Altyapısı projelerimizin teslimatını ve koordinasyonunu üstlenecek Kıdemli Proje Yöneticisi arıyoruz.
+
+Genel Nitelikler:
+- Bankacılık veya FinTech sektöründe en az 3-4 yıl teknik proje yönetimi tecrübesi,
+- POS, SoftPOS, API entegrasyonu ve ödeme sistemleri projelerinde yer almış,
+- Agile / Scrum süreçlerini uygulayan, Jira ve Confluence araçlarına hakim,
+- Yazılım geliştirme, QA ve iş birimleri arasında güçlü iletişim ve teslimat koordinasyonu yeteneği.`,
+    dateAdded: "2026-09-29",
+    status: "to_apply",
+    notes: "Türkiye içi hibrit pozisyon. Bankacılık ve ödeme sistemleri proje yönetimi deneyimi tam uyuyor.",
+    analysis: {
+      roleType: "PROJECT",
+      eligibility: {
+        canApplyFromTurkey: true,
+        remoteFromTurkey: true,
+        relocationOffered: false,
+        visaSponsorship: "unclear",
+        summary: "Türkiye içi pozisyon; yerel başvuru için hiçbir yasal engel yoktur."
+      },
+      strongMatches: [
+        "POS, SoftPOS ve ödeme altyapılarında teknik teslimat ve proje yönetimi",
+        "Jira ve Agile sprint takibi",
+        "Yazılım ve QA ekipleri arasında teknik köprü kurma tecrübesi"
+      ],
+      transferableExperience: [
+        "Ürün yönetimi şapkası altında yürütülen teslimat ve müşteri entegrasyon süreçleri"
+      ],
+      gaps: [],
+      productFit: [],
+      projectFit: [
+        "Ödeme altyapısı ve dijital bankacılık projelerinin teslimat takvimini yönetme tecrübesi adayın profiline tam oturuyor."
+      ],
+      experienceToEmphasize: [
+        "SoftPOS ve ödeme sistemleri teslimat takvimleri"
+      ],
+      redFlags: [],
+      interviewRisks: [],
+      finalVerdict: "APPLY",
+      oneSentenceReason: "Pozisyonun beklediği POS, ödeme sistemleri ve teknik proje yönetimi yetkinlikleri adayın mevcut profiliyle eksiksiz örtüşüyor.",
+      analyzedAt: "2026-09-29T15:10:00Z"
+    }
   }
 ];
