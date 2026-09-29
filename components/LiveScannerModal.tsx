@@ -42,10 +42,11 @@ export const LiveScannerModal: React.FC<LiveScannerModalProps> = ({
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [hasScanned, setHasScanned] = useState(false);
 
-  // Network selection toggles (RemoteOK removed per user request)
+  // Network selection toggles
   const [selectedSources, setSelectedSources] = useState<string[]>([
     "linkedin",
     "kariyer",
+    "remoteok",
     "europe"
   ]);
 
@@ -205,6 +206,18 @@ export const LiveScannerModal: React.FC<LiveScannerModalProps> = ({
               }`}
             >
               🟣 Kariyer.net (Türkiye)
+            </button>
+
+            <button
+              type="button"
+              onClick={() => toggleSource("remoteok")}
+              className={`px-3 py-1 rounded-lg text-xs font-bold transition-all border ${
+                selectedSources.includes("remoteok")
+                  ? "bg-emerald-50 text-emerald-700 border-emerald-300 shadow-2xs"
+                  : "bg-slate-50 text-slate-400 border-slate-200"
+              }`}
+            >
+              🟢 RemoteOK
             </button>
 
             <button

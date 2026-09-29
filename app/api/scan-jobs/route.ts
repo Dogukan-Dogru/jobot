@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { JobPosting, MasterProfile, AppSettings } from "@/types";
 import { runHeuristicAnalysis } from "@/lib/aiService";
+import crypto from "crypto";
 
 // Helper to strip HTML tags
 function stripHtml(html: string): string {
@@ -22,15 +23,15 @@ function isValidTargetRole(title: string): boolean {
 
   // 1. Strict Blacklist (Negative keywords - reject immediately)
   const blacklist = [
-        "software engineer", "software developer", "frontend", "backend", "fullstack",
-        "full stack", "devops", "sre", "qa engineer", "test engineer", "architect",
-        "product designer", "ui/ux", "ux designer", "ui designer", "graphic designer",
-        "account manager", "account executive", "sales manager", "sales executive",
-        "business development", "customer success", "customer support", "recruiter",
-        "hr manager", "talent acquisition", "general manager assistant", "medikal",
-        "medical", "export", "pharmaceutical", "data engineer", "data scientist",
-        "financial analyst", "product marketing manager", "pmm", "asistan", "assistant",
-        "relations specialist", "specialist (spanish", "satış", "pazarlama uzmanı"
+    "software engineer", "software developer", "frontend", "backend", "fullstack",
+    "full stack", "devops", "sre", "qa engineer", "test engineer", "architect",
+    "product designer", "ui/ux", "ux designer", "ui designer", "graphic designer",
+    "account manager", "account executive", "sales manager", "sales executive",
+    "business development", "customer success", "customer support", "recruiter",
+    "hr manager", "talent acquisition", "general manager assistant", "medikal",
+    "medical", "export", "pharmaceutical", "data engineer", "data scientist",
+    "financial analyst", "product marketing manager", "pmm", "asistan", "assistant",
+    "relations specialist", "specialist (spanish", "satış", "pazarlama uzmanı"
   ];
 
   for (const neg of blacklist) {
@@ -53,110 +54,116 @@ function isValidTargetRole(title: string): boolean {
 }
 
 const BROWSER_HEADERS = {
-  "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
+  "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
   "Accept-Language": "tr-TR,tr;q=0.9,en-US;q=0.8,en;q=0.7",
-  "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8"
+  "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,application/json,*/*;q=0.8"
 };
 
 export async function POST(req: NextRequest) {
   try {
     const { 
       profile, 
-      settings, 
       existingUrls = [],
-      sources = ["linkedin", "kariyer", "europe"]
+      sources = ["linkedin", "kariyer", "remoteok", "europe"]
     }: { 
       profile: MasterProfile; 
-      settings: AppSettings; 
+      settings?: AppSettings; 
       existingUrls: string[];
       sources?: string[];
     } = await req.json();
 
     const fetchedJobs: JobPosting[] = [];
-    const existingUrlSet = new Set(existingUrls.map(u => (u || "").toLowerCase().trim()));
+    const seenUrls = new Set(existingUrls.map(u => (u || "").toLowerCase().trim()).filter(Boolean));
+
+    const tasks: Promise<void>[] = [];
 
     // -------------------------------------------------------------
-    // SOURCE 1: LinkedIn Guest Job Search API (Türkiye & Global)
+    // SOURCE 1: LinkedIn Guest Job Search API (Parallel TR & Global)
     // -------------------------------------------------------------
     if (sources.includes("linkedin")) {
-      try {
+      const fetchLinkedIn = async () => {
         const liUrls = [
           "https://www.linkedin.com/jobs-guest/jobs/api/seeMoreJobPostings/search?keywords=Product%20Manager&location=Turkey&start=0",
           "https://www.linkedin.com/jobs-guest/jobs/api/seeMoreJobPostings/search?keywords=Product%20Manager&location=Worldwide&f_WT=2&start=0"
         ];
 
-        for (const liUrl of liUrls) {
+        const subFetches = liUrls.map(async (liUrl) => {
           try {
             const liRes = await fetch(liUrl, {
               headers: BROWSER_HEADERS,
-              signal: AbortSignal.timeout(6000)
+              signal: AbortSignal.timeout(5000)
             });
 
-            if (liRes.ok) {
-              const html = await liRes.text();
-              const titleRegex = /<h3[^>]*class="[^"]*base-search-card__title[^"]*"[^>]*>([\s\S]*?)<\/h3>/gi;
-              const companyRegex = /<h4[^>]*class="[^"]*base-search-card__subtitle[^"]*"[^>]*>([\s\S]*?)<\/h4>/gi;
-              const linkRegex = /<a[^>]*class="[^"]*base-card__full-link[^"]*"[^>]*href="([^"]+)"/gi;
-              const locRegex = /<span[^>]*class="[^"]*job-search-card__location[^"]*"[^>]*>([\s\S]*?)<\/span>/gi;
+            if (!liRes.ok) return;
 
-              const titles = [...html.matchAll(titleRegex)].map(m => stripHtml(m[1]));
-              const companies = [...html.matchAll(companyRegex)].map(m => stripHtml(m[1]));
-              const links = [...html.matchAll(linkRegex)].map(m => m[1].split("?")[0]);
-              const locations = [...html.matchAll(locRegex)].map(m => stripHtml(m[1]));
+            const html = await liRes.text();
+            const titleRegex = /<h3[^>]*class="[^"]*base-search-card__title[^"]*"[^>]*>([\s\S]*?)<\/h3>/gi;
+            const companyRegex = /<h4[^>]*class="[^"]*base-search-card__subtitle[^"]*"[^>]*>([\s\S]*?)<\/h4>/gi;
+            const linkRegex = /<a[^>]*class="[^"]*base-card__full-link[^"]*"[^>]*href="([^"]+)"/gi;
+            const locRegex = /<span[^>]*class="[^"]*job-search-card__location[^"]*"[^>]*>([\s\S]*?)<\/span>/gi;
 
-              for (let i = 0; i < titles.length; i++) {
-                const title = titles[i];
-                if (!isValidTargetRole(title)) continue; // STRICT FILTER
+            const titles = [...html.matchAll(titleRegex)].map(m => stripHtml(m[1]));
+            const companies = [...html.matchAll(companyRegex)].map(m => stripHtml(m[1]));
+            const links = [...html.matchAll(linkRegex)].map(m => m[1].split("?")[0]);
+            const locations = [...html.matchAll(locRegex)].map(m => stripHtml(m[1]));
 
-                const url = links[i] || "";
-                if (existingUrlSet.has(url.toLowerCase().trim())) continue;
+            for (let i = 0; i < titles.length; i++) {
+              const title = titles[i];
+              if (!isValidTargetRole(title)) continue; // STRICT FILTER
 
-                const company = companies[i] || "LinkedIn Company";
-                const location = locations[i] || "Turkey / Remote";
+              const url = links[i] || "";
+              const urlKey = url.toLowerCase().trim();
+              if (urlKey && seenUrls.has(urlKey)) continue;
+              if (urlKey) seenUrls.add(urlKey);
 
-                const newJob: JobPosting = {
-                  id: `live-linkedin-${Buffer.from(url || Math.random().toString()).toString("base64").substring(0, 10)}`,
-                  title,
-                  company,
-                  location,
-                  country: location.includes("Turkey") || location.includes("Istanbul") ? "Türkiye" : "Global Remote",
-                  workModel: location.toLowerCase().includes("remote") ? "remote" : "hybrid",
-                  platform: "linkedin",
-                  sourceUrl: url,
-                  rawDescription: `${company} bünyesinde ${title} pozisyonu. Lokasyon: ${location}.\nDetaylı görev tanımı ve başvuru için LinkedIn linkini ziyaret ediniz.`,
-                  dateAdded: new Date().toISOString().split("T")[0],
-                  status: "new"
-                };
+              const company = companies[i] || "LinkedIn Company";
+              const location = locations[i] || "Turkey / Remote";
 
-                newJob.analysis = runHeuristicAnalysis(newJob, profile);
-                if (newJob.analysis.finalVerdict === "APPLY") {
-                  newJob.status = "to_apply";
-                }
-                fetchedJobs.push(newJob);
-                existingUrlSet.add(url.toLowerCase().trim());
+              const newJob: JobPosting = {
+                id: `live-linkedin-${crypto.randomUUID()}`,
+                title,
+                company,
+                location,
+                country: location.includes("Turkey") || location.includes("Istanbul") ? "Türkiye" : "Global Remote",
+                workModel: location.toLowerCase().includes("remote") ? "remote" : "hybrid",
+                platform: "linkedin",
+                sourceUrl: url,
+                rawDescription: `${company} bünyesinde ${title} pozisyonu. Lokasyon: ${location}.\nDetaylı görev tanımı ve başvuru için LinkedIn bağlantısını ziyaret ediniz.`,
+                dateAdded: new Date().toISOString().split("T")[0],
+                status: "new"
+              };
+
+              newJob.analysis = runHeuristicAnalysis(newJob, profile);
+              if (newJob.analysis.finalVerdict === "APPLY") {
+                newJob.status = "to_apply";
               }
+              fetchedJobs.push(newJob);
             }
           } catch (e) {
-            console.warn("LinkedIn sub-fetch failed:", e);
+            console.warn("LinkedIn sub-fetch error:", e);
           }
-        }
-      } catch (err) {
-        console.warn("LinkedIn search failed:", err);
-      }
+        });
+
+        await Promise.allSettled(subFetches);
+      };
+
+      tasks.push(fetchLinkedIn());
     }
 
     // -------------------------------------------------------------
     // SOURCE 2: Kariyer.net Live Search (Türkiye)
     // -------------------------------------------------------------
     if (sources.includes("kariyer")) {
-      try {
-        const kariyerUrl = "https://www.kariyer.net/is-ilanlari?kw=product%20manager";
-        const kRes = await fetch(kariyerUrl, {
-          headers: BROWSER_HEADERS,
-          signal: AbortSignal.timeout(7000)
-        });
+      const fetchKariyer = async () => {
+        try {
+          const kariyerUrl = "https://www.kariyer.net/is-ilanlari?kw=product%20manager";
+          const kRes = await fetch(kariyerUrl, {
+            headers: BROWSER_HEADERS,
+            signal: AbortSignal.timeout(5000)
+          });
 
-        if (kRes.ok) {
+          if (!kRes.ok) return;
+
           const html = await kRes.text();
           const cardRegex = /<a[^>]*href="(\/is-ilani\/[^"]+)"[^>]*>[\s\S]*?<span[^>]*data-test="ad-card-title"[^>]*>([\s\S]*?)<\/span>/gi;
           const matches = [...html.matchAll(cardRegex)];
@@ -165,17 +172,18 @@ export async function POST(req: NextRequest) {
             const rawUrl = "https://www.kariyer.net" + m[1];
             const title = stripHtml(m[2]);
 
-            if (!isValidTargetRole(title)) continue; // STRICT FILTER
-            if (existingUrlSet.has(rawUrl.toLowerCase().trim())) continue;
+            if (!isValidTargetRole(title)) continue;
+            const urlKey = rawUrl.toLowerCase().trim();
+            if (seenUrls.has(urlKey)) continue;
+            seenUrls.add(urlKey);
 
-            // Extract company name from slug if possible
             const slugParts = m[1].split("-");
             const companyNameGuess = slugParts.length > 2 
               ? slugParts.slice(1, -2).join(" ").toUpperCase() 
               : "Kariyer.net Şirketi";
 
             const newJob: JobPosting = {
-              id: `live-kariyer-${Buffer.from(rawUrl).toString("base64").substring(0, 10)}`,
+              id: `live-kariyer-${crypto.randomUUID()}`,
               title,
               company: companyNameGuess.substring(0, 30),
               location: "İstanbul / Türkiye",
@@ -193,50 +201,60 @@ export async function POST(req: NextRequest) {
               newJob.status = "to_apply";
             }
             fetchedJobs.push(newJob);
-            existingUrlSet.add(rawUrl.toLowerCase().trim());
           }
+        } catch (err) {
+          console.warn("Kariyer.net fetch failed:", err);
         }
-      } catch (err) {
-        console.warn("Kariyer.net fetch failed:", err);
-      }
+      };
+
+      tasks.push(fetchKariyer());
     }
 
-
-
     // -------------------------------------------------------------
-    // SOURCE 4: Jobicy & Arbeitnow (Europe & EMEA - Strict Filtered)
+    // SOURCE 3: RemoteOK API (Public JSON API)
     // -------------------------------------------------------------
-    if (sources.includes("europe")) {
-      try {
-        const jobicyRes = await fetch("https://jobicy.com/api/v2/remote-jobs?count=20&tag=product", {
-          headers: BROWSER_HEADERS,
-          signal: AbortSignal.timeout(6000)
-        });
+    if (sources.includes("remoteok")) {
+      const fetchRemoteOK = async () => {
+        try {
+          const res = await fetch("https://remoteok.com/api", {
+            headers: BROWSER_HEADERS,
+            signal: AbortSignal.timeout(5000)
+          });
 
-        if (jobicyRes.ok) {
-          const data = await jobicyRes.json();
-          const jobs = data.jobs || [];
+          if (!res.ok) return;
 
-          for (const item of jobs) {
-            const title = item.jobTitle || "";
-            if (!isValidTargetRole(title)) continue; // STRICT FILTER
+          const data = await res.json();
+          if (!Array.isArray(data)) return;
 
-            const url = item.url || "";
-            if (existingUrlSet.has(url.toLowerCase().trim())) continue;
+          // data[0] is often legal/disclaimer object, items start at 1
+          const items = data.slice(1);
 
-            const desc = stripHtml(item.jobDescription || item.jobExcerpt || "");
-            const location = item.jobGeo || "Worldwide Remote";
+          for (const item of items) {
+            const title = item.position || "";
+            if (!isValidTargetRole(title)) continue;
+
+            const url = item.url || (item.id ? `https://remoteok.com/remote-jobs/${item.id}` : "");
+            const urlKey = url.toLowerCase().trim();
+            if (urlKey && seenUrls.has(urlKey)) continue;
+            if (urlKey) seenUrls.add(urlKey);
+
+            const desc = stripHtml(item.description || "");
+            const location = item.location || "Worldwide Remote";
+            const salary = (item.salary_min && item.salary_max) 
+              ? `$${Math.round(item.salary_min / 1000)}k - $${Math.round(item.salary_max / 1000)}k` 
+              : undefined;
 
             const newJob: JobPosting = {
-              id: `live-jobicy-${item.id || Math.random().toString(36).substring(7)}`,
+              id: `live-remoteok-${crypto.randomUUID()}`,
               title,
-              company: item.companyName || "Tech Company",
+              company: item.company || "Remote Company",
               location,
-              country: location.includes("Europe") ? "Europe" : location.includes("USA") ? "United States" : "Remote",
+              country: location.toLowerCase().includes("us") ? "United States" : "Worldwide Remote",
               workModel: "remote",
               platform: "remoteok",
+              salary,
               sourceUrl: url,
-              rawDescription: desc,
+              rawDescription: desc.length > 50 ? desc : `${item.company} bünyesinde ${title} pozisyonu. RemoteOK ilanı.`,
               dateAdded: new Date().toISOString().split("T")[0],
               status: "new"
             };
@@ -246,15 +264,129 @@ export async function POST(req: NextRequest) {
               newJob.status = "to_apply";
             }
             fetchedJobs.push(newJob);
-            existingUrlSet.add(url.toLowerCase().trim());
           }
+        } catch (err) {
+          console.warn("RemoteOK fetch failed:", err);
         }
-      } catch (err) {
-        console.warn("Jobicy fetch failed:", err);
-      }
+      };
+
+      tasks.push(fetchRemoteOK());
     }
 
-    // Sort with APPLY first, then CONSIDER, then SKIP
+    // -------------------------------------------------------------
+    // SOURCE 4: Jobicy & Remotive (Europe & Global Remote)
+    // -------------------------------------------------------------
+    if (sources.includes("europe")) {
+      const fetchEurope = async () => {
+        const subFetches = [
+          // Jobicy
+          (async () => {
+            try {
+              const res = await fetch("https://jobicy.com/api/v2/remote-jobs?count=20&tag=product", {
+                headers: BROWSER_HEADERS,
+                signal: AbortSignal.timeout(5000)
+              });
+              if (!res.ok) return;
+              const data = await res.json();
+              const jobs = data.jobs || [];
+
+              for (const item of jobs) {
+                const title = item.jobTitle || "";
+                if (!isValidTargetRole(title)) continue;
+
+                const url = item.url || "";
+                const urlKey = url.toLowerCase().trim();
+                if (urlKey && seenUrls.has(urlKey)) continue;
+                if (urlKey) seenUrls.add(urlKey);
+
+                const desc = stripHtml(item.jobDescription || item.jobExcerpt || "");
+                const location = item.jobGeo || "Worldwide Remote";
+
+                const newJob: JobPosting = {
+                  id: `live-jobicy-${crypto.randomUUID()}`,
+                  title,
+                  company: item.companyName || "Tech Company",
+                  location,
+                  country: location.includes("Europe") ? "Europe" : "Worldwide Remote",
+                  workModel: "remote",
+                  platform: "company",
+                  sourceUrl: url,
+                  rawDescription: desc,
+                  dateAdded: new Date().toISOString().split("T")[0],
+                  status: "new"
+                };
+
+                newJob.analysis = runHeuristicAnalysis(newJob, profile);
+                if (newJob.analysis.finalVerdict === "APPLY") {
+                  newJob.status = "to_apply";
+                }
+                fetchedJobs.push(newJob);
+              }
+            } catch (e) {
+              console.warn("Jobicy sub-fetch failed:", e);
+            }
+          })(),
+
+          // Remotive
+          (async () => {
+            try {
+              const res = await fetch("https://remotive.com/api/remote-jobs?category=product", {
+                headers: BROWSER_HEADERS,
+                signal: AbortSignal.timeout(5000)
+              });
+              if (!res.ok) return;
+              const data = await res.json();
+              const jobs = data.jobs || [];
+
+              for (const item of jobs) {
+                const title = item.title || "";
+                if (!isValidTargetRole(title)) continue;
+
+                const url = item.url || "";
+                const urlKey = url.toLowerCase().trim();
+                if (urlKey && seenUrls.has(urlKey)) continue;
+                if (urlKey) seenUrls.add(urlKey);
+
+                const desc = stripHtml(item.description || "");
+                const location = item.candidate_required_location || "Worldwide";
+
+                const newJob: JobPosting = {
+                  id: `live-remotive-${crypto.randomUUID()}`,
+                  title,
+                  company: item.company_name || "Tech Company",
+                  location,
+                  country: location.includes("Europe") ? "Europe" : location.includes("USA") ? "United States" : "Worldwide Remote",
+                  workModel: "remote",
+                  platform: "company",
+                  salary: item.salary || undefined,
+                  sourceUrl: url,
+                  rawDescription: desc,
+                  dateAdded: new Date().toISOString().split("T")[0],
+                  status: "new"
+                };
+
+                newJob.analysis = runHeuristicAnalysis(newJob, profile);
+                if (newJob.analysis.finalVerdict === "APPLY") {
+                  newJob.status = "to_apply";
+                }
+                fetchedJobs.push(newJob);
+              }
+            } catch (e) {
+              console.warn("Remotive sub-fetch failed:", e);
+            }
+          })()
+        ];
+
+        await Promise.allSettled(subFetches);
+      };
+
+      tasks.push(fetchEurope());
+    }
+
+    // Execute all sources concurrently
+    await Promise.allSettled(tasks);
+
+    // Sort with APPLY first, then CONSIDER, then SKIP (including country-locked ones) at the very bottom
     const verdictPriority: Record<string, number> = { APPLY: 1, CONSIDER: 2, SKIP: 3 };
     fetchedJobs.sort((a, b) => {
       const vA = a.analysis?.finalVerdict ? verdictPriority[a.analysis.finalVerdict] || 99 : 99;

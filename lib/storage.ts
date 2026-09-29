@@ -27,7 +27,27 @@ export function getStoredJobs(): JobPosting[] {
       localStorage.setItem(STORAGE_KEYS.JOBS, JSON.stringify(sampleJobPostings));
       return sampleJobPostings;
     }
-    return JSON.parse(raw);
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return sampleJobPostings;
+
+    // Sanitize any missing or duplicate IDs from previous scans
+    const seenIds = new Set<string>();
+    let hasModified = false;
+    const sanitized: JobPosting[] = parsed.map((job: JobPosting, idx: number) => {
+      if (!job.id || seenIds.has(job.id)) {
+        hasModified = true;
+        const newId = `${job.platform || "job"}-${Date.now().toString(36)}-${Math.random().toString(36).substring(2, 7)}-${idx}`;
+        seenIds.add(newId);
+        return { ...job, id: newId };
+      }
+      seenIds.add(job.id);
+      return job;
+    });
+
+    if (hasModified) {
+      localStorage.setItem(STORAGE_KEYS.JOBS, JSON.stringify(sanitized));
+    }
+    return sanitized;
   } catch (error) {
     console.error("Error reading jobs from localStorage:", error);
     return sampleJobPostings;

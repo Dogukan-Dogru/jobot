@@ -95,9 +95,25 @@ export default function Home() {
   };
 
   const handleImportLiveJobs = (newJobs: JobPosting[]) => {
-    const updated = [...newJobs, ...jobs];
-    saveJobs(updated);
-    setJobs(updated);
+    setJobs((prevJobs) => {
+      const existingUrls = new Set(prevJobs.map((j) => (j.sourceUrl || "").toLowerCase().trim()).filter(Boolean));
+      const seenIds = new Set(prevJobs.map((j) => j.id));
+
+      const preparedNewJobs = newJobs
+        .filter((j) => !j.sourceUrl || !existingUrls.has(j.sourceUrl.toLowerCase().trim()))
+        .map((j) => {
+          let id = j.id;
+          if (!id || seenIds.has(id)) {
+            id = `${j.platform || "job"}-${Date.now().toString(36)}-${Math.random().toString(36).substring(2, 8)}`;
+          }
+          seenIds.add(id);
+          return { ...j, id };
+        });
+
+      const updated = [...preparedNewJobs, ...prevJobs];
+      saveJobs(updated);
+      return updated;
+    });
     setActiveTab("kanban");
     if (newJobs.length > 0) {
       setSelectedJob(newJobs[0]);
@@ -105,43 +121,54 @@ export default function Home() {
   };
 
   const handleUpdateStatus = (id: string, status: JobStatus) => {
-    const target = jobs.find((j) => j.id === id);
-    if (!target) return;
-    const updatedJob = { ...target, status };
-    const updated = saveJob(updatedJob);
-    setJobs(updated);
+    setJobs((prevJobs) => {
+      const updated = prevJobs.map((j) => (j.id === id ? { ...j, status } : j));
+      saveJobs(updated);
+      return updated;
+    });
+    setSelectedJob((prev) => (prev && prev.id === id ? { ...prev, status } : prev));
   };
 
   const handleUpdateNotes = (id: string, notes: string) => {
-    const target = jobs.find((j) => j.id === id);
-    if (!target) return;
-    const updatedJob = { ...target, notes };
-    const updated = saveJob(updatedJob);
-    setJobs(updated);
+    setJobs((prevJobs) => {
+      const updated = prevJobs.map((j) => (j.id === id ? { ...j, notes } : j));
+      saveJobs(updated);
+      return updated;
+    });
+    setSelectedJob((prev) => (prev && prev.id === id ? { ...prev, notes } : prev));
   };
 
   const handleReanalyze = async (id: string) => {
     const target = jobs.find((j) => j.id === id);
     if (!target) return;
     const analysis = await analyzeJobWithAI(target, profile, settings);
-    const updatedJob = { ...target, analysis };
-    const updated = saveJob(updatedJob);
-    setJobs(updated);
+    setJobs((prevJobs) => {
+      const updated = prevJobs.map((j) => (j.id === id ? { ...j, analysis } : j));
+      saveJobs(updated);
+      return updated;
+    });
+    setSelectedJob((prev) => (prev && prev.id === id ? { ...prev, analysis } : prev));
   };
 
   const handleGeneratePackage = async (id: string) => {
     const target = jobs.find((j) => j.id === id);
     if (!target) return;
     const pkg = await generatePackageWithAI(target, profile, settings);
-    const updatedJob = { ...target, applicationPackage: pkg };
-    const updated = saveJob(updatedJob);
-    setJobs(updated);
+    setJobs((prevJobs) => {
+      const updated = prevJobs.map((j) => (j.id === id ? { ...j, applicationPackage: pkg } : j));
+      saveJobs(updated);
+      return updated;
+    });
+    setSelectedJob((prev) => (prev && prev.id === id ? { ...prev, applicationPackage: pkg } : prev));
   };
 
   const handleDeleteJob = (id: string) => {
-    const updated = deleteJob(id);
-    setJobs(updated);
-    if (selectedJob?.id === id) setSelectedJob(null);
+    setJobs((prevJobs) => {
+      const updated = prevJobs.filter((j) => j.id !== id);
+      saveJobs(updated);
+      return updated;
+    });
+    setSelectedJob((prev) => (prev && prev.id === id ? null : prev));
   };
 
   const handleSaveProfile = (newProfile: MasterProfile) => {

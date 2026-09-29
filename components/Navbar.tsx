@@ -108,7 +108,7 @@ export const Navbar: React.FC<NavbarProps> = ({
             <button
               onClick={onOpenLiveScanner}
               className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-linear-to-r from-sky-500 via-indigo-600 to-indigo-700 hover:from-sky-600 hover:to-indigo-800 active:scale-95 text-white font-bold text-xs sm:text-sm shadow-md shadow-indigo-500/20 transition-all cursor-pointer"
-              title="RemoteOK, Jobicy ve Avrupa ağlarından en yeni ilanları otomatik tara"
+              title="LinkedIn, Kariyer.net, RemoteOK ve küresel ağlardan en yeni ilanları otomatik tara"
             >
               <Search className="w-3.5 h-3.5 sm:w-4 sm:h-4 stroke-[2.5]" />
               <span>Canlı İlanları Tara</span>
