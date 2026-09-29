@@ -159,17 +159,49 @@ export const JobDetailModal: React.FC<JobDetailModalProps> = ({
                 <label className="text-[10px] font-bold uppercase text-slate-400 mb-0.5">
                   Başvuru Durumu
                 </label>
-                <select
-                  value={job.status}
-                  onChange={(e) => onUpdateStatus(job.id, e.target.value as JobStatus)}
-                  className="text-xs font-semibold px-2.5 py-1.5 rounded-xl border border-slate-200 bg-white text-slate-800 shadow-xs focus:ring-2 focus:ring-indigo-500"
-                >
-                  {statusOptions.map((opt) => (
-                    <option key={opt.value} value={opt.value}>
-                      {opt.label}
-                    </option>
-                  ))}
-                </select>
+                <div className="flex items-center gap-1.5">
+                  {job.status !== "rejected" ? (
+                    <button
+                      onClick={() => onUpdateStatus(job.id, "rejected")}
+                      title="İlanı Pas Geç / Reddet"
+                      className="text-xs font-semibold px-2 py-1.5 rounded-lg bg-rose-50 text-rose-700 hover:bg-rose-100 border border-rose-200 transition-colors flex items-center gap-1"
+                    >
+                      <X className="w-3.5 h-3.5 text-rose-500" />
+                      <span>Pas Geç</span>
+                    </button>
+                  ) : (
+                    <button
+                      onClick={() => onUpdateStatus(job.id, "new")}
+                      title="İnceleneceklere Geri Al"
+                      className="text-xs font-semibold px-2 py-1.5 rounded-lg bg-slate-100 text-slate-700 hover:bg-slate-200 border border-slate-300 transition-colors"
+                    >
+                      ↩ Geri Al
+                    </button>
+                  )}
+
+                  {job.status !== "to_apply" && job.status !== "applied" && (
+                    <button
+                      onClick={() => onUpdateStatus(job.id, "to_apply")}
+                      title="Başvurulacak Listesine Ekle"
+                      className="text-xs font-semibold px-2 py-1.5 rounded-lg bg-indigo-50 text-indigo-700 hover:bg-indigo-100 border border-indigo-200 transition-colors flex items-center gap-1"
+                    >
+                      <CheckCircle2 className="w-3.5 h-3.5 text-indigo-600" />
+                      <span>Başvurulacak</span>
+                    </button>
+                  )}
+
+                  <select
+                    value={job.status}
+                    onChange={(e) => onUpdateStatus(job.id, e.target.value as JobStatus)}
+                    className="text-xs font-semibold px-2.5 py-1.5 rounded-xl border border-slate-200 bg-white text-slate-800 shadow-xs focus:ring-2 focus:ring-indigo-500"
+                  >
+                    {statusOptions.map((opt) => (
+                      <option key={opt.value} value={opt.value}>
+                        {opt.label}
+                      </option>
+                    ))}
+                  </select>
+                </div>
               </div>
 
               <button

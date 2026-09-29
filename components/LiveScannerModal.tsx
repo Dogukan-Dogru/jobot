@@ -42,13 +42,15 @@ export const LiveScannerModal: React.FC<LiveScannerModalProps> = ({
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [hasScanned, setHasScanned] = useState(false);
 
-  // Network selection toggles
+  // Network selection toggles (RemoteOK removed per user request)
   const [selectedSources, setSelectedSources] = useState<string[]>([
     "linkedin",
     "kariyer",
-    "remoteok",
     "europe"
   ]);
+
+  // Hide country-locked / SKIP jobs by default
+  const [hideSkipped, setHideSkipped] = useState(true);
 
   if (!isOpen) return null;
 
@@ -207,18 +209,6 @@ export const LiveScannerModal: React.FC<LiveScannerModalProps> = ({
 
             <button
               type="button"
-              onClick={() => toggleSource("remoteok")}
-              className={`px-3 py-1 rounded-lg text-xs font-bold transition-all border ${
-                selectedSources.includes("remoteok")
-                  ? "bg-emerald-50 text-emerald-700 border-emerald-300 shadow-2xs"
-                  : "bg-slate-50 text-slate-400 border-slate-200"
-              }`}
-            >
-              🟢 RemoteOK (Worldwide)
-            </button>
-
-            <button
-              type="button"
               onClick={() => toggleSource("europe")}
               className={`px-3 py-1 rounded-lg text-xs font-bold transition-all border ${
                 selectedSources.includes("europe")
@@ -226,7 +216,7 @@ export const LiveScannerModal: React.FC<LiveScannerModalProps> = ({
                   : "bg-slate-50 text-slate-400 border-slate-200"
               }`}
             >
-              🟠 Jobicy (EMEA & Europe)
+              🟠 Avrupa & Global Remote (Jobicy & EMEA)
             </button>
           </div>
 
@@ -283,7 +273,17 @@ export const LiveScannerModal: React.FC<LiveScannerModalProps> = ({
                 </span>
               </div>
 
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-3">
+                <label className="flex items-center gap-1.5 cursor-pointer text-slate-700 font-semibold text-xs">
+                  <input
+                    type="checkbox"
+                    checked={hideSkipped}
+                    onChange={(e) => setHideSkipped(e.target.checked)}
+                    className="rounded text-indigo-600 focus:ring-indigo-500 w-3.5 h-3.5"
+                  />
+                  <span>Sahte Remote & SKIP İlanları Gizle</span>
+                </label>
+                <span className="text-slate-300">|</span>
                 <button
                   onClick={() => handleSelectAll(true)}
                   className="text-xs font-semibold text-indigo-600 hover:text-indigo-800 underline"
@@ -314,7 +314,7 @@ export const LiveScannerModal: React.FC<LiveScannerModalProps> = ({
             </div>
           )}
 
-          {discoveredJobs.map((job) => {
+          {(hideSkipped ? discoveredJobs.filter(j => j.analysis?.finalVerdict !== "SKIP") : discoveredJobs).map((job) => {
             const verdict = job.analysis?.finalVerdict;
             const isSelected = selectedIds.has(job.id);
             const canTR = job.analysis?.eligibility.canApplyFromTurkey;

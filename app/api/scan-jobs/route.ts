@@ -64,7 +64,7 @@ export async function POST(req: NextRequest) {
       profile, 
       settings, 
       existingUrls = [],
-      sources = ["linkedin", "kariyer", "remoteok", "europe"]
+      sources = ["linkedin", "kariyer", "europe"]
     }: { 
       profile: MasterProfile; 
       settings: AppSettings; 
@@ -201,55 +201,7 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    // -------------------------------------------------------------
-    // SOURCE 3: RemoteOK (Strict Filtered)
-    // -------------------------------------------------------------
-    if (sources.includes("remoteok")) {
-      try {
-        const remoteOkRes = await fetch("https://remoteok.com/api?tag=product", {
-          headers: BROWSER_HEADERS,
-          signal: AbortSignal.timeout(6000)
-        });
 
-        if (remoteOkRes.ok) {
-          const list = await remoteOkRes.json();
-          const items = Array.isArray(list) ? list.slice(1) : [];
-
-          for (const item of items) {
-            const title = item.position || "";
-            if (!isValidTargetRole(title)) continue; // STRICT FILTER
-
-            const url = item.url || "";
-            if (existingUrlSet.has(url.toLowerCase().trim())) continue;
-
-            const desc = stripHtml(item.description || "");
-            const newJob: JobPosting = {
-              id: `live-remoteok-${item.id || Math.random().toString(36).substring(7)}`,
-              title,
-              company: item.company || "Tech Company",
-              location: item.location || "Remote Worldwide",
-              country: "Global Remote",
-              workModel: "remote",
-              salary: item.salary_min && item.salary_max ? `$${item.salary_min.toLocaleString()} - $${item.salary_max.toLocaleString()}` : undefined,
-              platform: "remoteok",
-              sourceUrl: url,
-              rawDescription: desc,
-              dateAdded: new Date().toISOString().split("T")[0],
-              status: "new"
-            };
-
-            newJob.analysis = runHeuristicAnalysis(newJob, profile);
-            if (newJob.analysis.finalVerdict === "APPLY") {
-              newJob.status = "to_apply";
-            }
-            fetchedJobs.push(newJob);
-            existingUrlSet.add(url.toLowerCase().trim());
-          }
-        }
-      } catch (err) {
-        console.warn("RemoteOK fetch failed:", err);
-      }
-    }
 
     // -------------------------------------------------------------
     // SOURCE 4: Jobicy & Arbeitnow (Europe & EMEA - Strict Filtered)

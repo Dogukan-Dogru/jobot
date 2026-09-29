@@ -143,6 +143,42 @@ export function runHeuristicAnalysis(job: JobPosting, profile: MasterProfile): J
     text.includes("remote within eu only") ||
     text.includes("eu only");
 
+  // Detect country-locked remote (e.g. "must be based in Spain", "hiring specifically for this market")
+  const countryLockPatterns = [
+    /must be based in (?:the )?([a-z\s]+)/i,
+    /should already be based in (?:the )?([a-z\s]+)/i,
+    /must reside in (?:the )?([a-z\s]+)/i,
+    /must be located in (?:the )?([a-z\s]+)/i,
+    /remote within (?:the )?([a-z\s]+)/i,
+    /remote in (?:the )?([a-z\s]+) only/i,
+    /hiring specifically for this market/i,
+    /candidates must be based in/i,
+    /applicants should already be based in/i,
+    /only open to candidates (?:based|residing|located) in/i,
+    /residents? of (?:the )?([a-z\s]+) only/i,
+    /based in spain/i,
+    /based in the uk/i,
+    /based in the us/i,
+    /based in germany/i,
+    /based in france/i
+  ];
+
+  let isCountryLocked = false;
+  let lockedReason = "";
+  if (!isTurkeyJob && !isWorldwideRemote) {
+    for (const pat of countryLockPatterns) {
+      const match = text.match(pat);
+      if (match) {
+        const matchedText = match[0].toLowerCase();
+        if (!matchedText.includes("turkey") && !matchedText.includes("türkiye")) {
+          isCountryLocked = true;
+          lockedReason = match[0];
+          break;
+        }
+      }
+    }
+  }
+
   let canApplyFromTurkey: boolean | "unclear" = "unclear";
   let remoteFromTurkey: boolean | "unclear" = "unclear";
   let relocationOffered: boolean | "unclear" = false;
@@ -154,6 +190,11 @@ export function runHeuristicAnalysis(job: JobPosting, profile: MasterProfile): J
     remoteFromTurkey = job.workModel === "remote" ? true : "unclear";
     visaSponsorship = "unclear";
     eligibilitySummary = "Pozisyon Türkiye merkezli olduğundan yasal veya lokasyon engeli bulunmuyor.";
+  } else if (isCountryLocked) {
+    canApplyFromTurkey = false;
+    remoteFromTurkey = false;
+    visaSponsorship = "not_offered";
+    eligibilitySummary = `İlan uzaktan çalışma (remote) görünse de adayın yerel olarak o ülkede ikamet etmesini zorunlu tutuyor ("${lockedReason}"). Türkiye'de ikamet eden adaylar için uygun değildir.`;
   } else if (hasNoSponsorship && (isRestrictedRemote || job.workModel === "onsite" || job.workModel === "hybrid")) {
     canApplyFromTurkey = false;
     remoteFromTurkey = false;
@@ -205,6 +246,9 @@ export function runHeuristicAnalysis(job: JobPosting, profile: MasterProfile): J
   }
 
   // Red flags
+  if (isCountryLocked) {
+    redFlags.push(`Ülke kısıtlamalı sahte remote: Yalnızca ilgili ülkede yerel ikamet edenler kabul ediliyor ("${lockedReason}")`);
+  }
   if (hasNoSponsorship && !isTurkeyJob) {
     redFlags.push("Vize sponsorluğu sunulmuyor (No sponsorship)");
   }
@@ -220,7 +264,10 @@ export function runHeuristicAnalysis(job: JobPosting, profile: MasterProfile): J
   let finalVerdict: JobAnalysis["finalVerdict"] = "CONSIDER";
   let oneSentenceReason = "";
 
-  if (hasNoSponsorship && !isTurkeyJob && !isWorldwideRemote) {
+  if (isCountryLocked) {
+    finalVerdict = "SKIP";
+    oneSentenceReason = `İlan uzaktan çalışma (remote) görünse de adayın o ülkede yerel ikamet etmesini şart koşuyor ("${lockedReason}"); Türkiye'den başvuruya kapalıdır.`;
+  } else if (hasNoSponsorship && !isTurkeyJob && !isWorldwideRemote) {
     finalVerdict = "SKIP";
     oneSentenceReason = "Teknik gereksinimler uygun olsa da vize sponsorluğu verilmiyor ve yerel çalışma izni zorunlu tutuluyor.";
   } else if (strongMatches.length >= 2 && canApplyFromTurkey !== false) {
