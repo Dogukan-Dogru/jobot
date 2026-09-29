@@ -13,7 +13,9 @@ import {
   resetProfileToDefault, 
   getStoredSettings, 
   saveSettings, 
-  exportJobsToCsv 
+  exportJobsToCsv,
+  fetchDbInitialData,
+  syncDbAction
 } from "@/lib/storage";
 import { analyzeJobWithAI, generatePackageWithAI } from "@/lib/aiService";
 import { Navbar } from "@/components/Navbar";
@@ -49,12 +51,41 @@ export default function Home() {
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isMounted, setIsMounted] = useState(false);
 
-  // Initialize client storage
+  // Initialize client storage and sync with SQLite DB
   useEffect(() => {
     setIsMounted(true);
-    setJobs(getStoredJobs());
-    setProfile(getStoredProfile());
-    setSettings(getStoredSettings());
+    const localJobs = getStoredJobs();
+    const localProfile = getStoredProfile();
+    const localSettings = getStoredSettings();
+
+    setJobs(localJobs);
+    setProfile(localProfile);
+    setSettings(localSettings);
+
+    // Fetch persistent data from SQLite backend
+    async function syncWithBackendDb() {
+      try {
+        const dbData = await fetchDbInitialData();
+        if (dbData && dbData.jobs && Array.isArray(dbData.jobs) && dbData.jobs.length > 0) {
+          // If SQLite has stored jobs, use them as source of truth
+          setJobs(dbData.jobs);
+          if (dbData.profile) setProfile(dbData.profile);
+          if (dbData.settings) setSettings(dbData.settings);
+        } else if (localJobs.length > 0) {
+          // If SQLite was empty but localStorage had data, migrate localStorage into SQLite
+          syncDbAction({
+            action: "migrateFromLocalStorage",
+            jobs: localJobs,
+            profile: localProfile,
+            settings: localSettings
+          });
+        }
+      } catch (err) {
+        console.warn("Initial DB sync error:", err);
+      }
+    }
+
+    syncWithBackendDb();
   }, []);
 
   // Sync selected job if jobs array updates

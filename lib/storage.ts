@@ -54,6 +54,37 @@ export function getStoredJobs(): JobPosting[] {
   }
 }
 
+// Background SQLite synchronization helper
+export async function syncDbAction(body: Record<string, unknown>): Promise<void> {
+  if (!isBrowser) return;
+  try {
+    fetch("/api/db", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body)
+    }).catch(err => console.warn("Background SQLite sync error:", err));
+  } catch (err) {
+    console.warn("Background SQLite sync trigger error:", err);
+  }
+}
+
+export async function fetchDbInitialData(): Promise<{
+  jobs?: JobPosting[];
+  profile?: MasterProfile;
+  settings?: AppSettings;
+} | null> {
+  if (!isBrowser) return null;
+  try {
+    const res = await fetch("/api/db");
+    if (!res.ok) return null;
+    const data = await res.json();
+    return data;
+  } catch (err) {
+    console.warn("Fetch from SQLite failed:", err);
+    return null;
+  }
+}
+
 export function saveJobs(jobs: JobPosting[]): void {
   if (!isBrowser) return;
   try {
@@ -61,6 +92,8 @@ export function saveJobs(jobs: JobPosting[]): void {
   } catch (error) {
     console.error("Error saving jobs to localStorage:", error);
   }
+  // Sync to SQLite
+  syncDbAction({ action: "saveJobs", jobs });
 }
 
 export function saveJob(job: JobPosting): JobPosting[] {
@@ -80,7 +113,11 @@ export function saveJob(job: JobPosting): JobPosting[] {
 export function deleteJob(id: string): JobPosting[] {
   const jobs = getStoredJobs();
   const updated = jobs.filter(j => j.id !== id);
-  saveJobs(updated);
+  if (isBrowser) {
+    localStorage.setItem(STORAGE_KEYS.JOBS, JSON.stringify(updated));
+  }
+  // Sync deletion to SQLite
+  syncDbAction({ action: "deleteJob", id });
   return updated;
 }
 
@@ -88,6 +125,7 @@ export function resetJobsToDefault(): JobPosting[] {
   if (isBrowser) {
     localStorage.setItem(STORAGE_KEYS.JOBS, JSON.stringify(sampleJobPostings));
   }
+  syncDbAction({ action: "saveJobs", jobs: sampleJobPostings });
   return sampleJobPostings;
 }
 
@@ -113,12 +151,15 @@ export function saveProfile(profile: MasterProfile): void {
   } catch (error) {
     console.error("Error saving profile to localStorage:", error);
   }
+  // Sync to SQLite
+  syncDbAction({ action: "saveProfile", profile });
 }
 
 export function resetProfileToDefault(): MasterProfile {
   if (isBrowser) {
     localStorage.setItem(STORAGE_KEYS.PROFILE, JSON.stringify(defaultMasterProfile));
   }
+  syncDbAction({ action: "saveProfile", profile: defaultMasterProfile });
   return defaultMasterProfile;
 }
 
@@ -143,6 +184,8 @@ export function saveSettings(settings: AppSettings): void {
   } catch (error) {
     console.error("Error saving settings to localStorage:", error);
   }
+  // Sync to SQLite
+  syncDbAction({ action: "saveSettings", settings });
 }
 
 // Export jobs to CSV for Google Sheets & Excel compatibility
