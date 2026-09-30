@@ -3,7 +3,6 @@ import path from "path";
 import fs from "fs";
 import os from "os";
 import { JobPosting, MasterProfile, AppSettings } from "@/types";
-import { sampleJobPostings } from "@/data/sampleJobs";
 import { defaultMasterProfile } from "@/data/defaultProfile";
 
 let dbInstance: Database.Database | null = null;
@@ -15,7 +14,7 @@ const memoryStore: {
   profile: MasterProfile;
   settings: AppSettings;
 } = {
-  jobs: [...sampleJobPostings],
+  jobs: [],
   profile: defaultMasterProfile,
   settings: {
     aiProvider: "demo",
@@ -90,6 +89,13 @@ export function getDatabase(): Database.Database | null {
         updated_at INTEGER NOT NULL
       );
     `);
+
+    // Purge any legacy sample jobs from database
+    try {
+      db.prepare("DELETE FROM jobs WHERE id LIKE 'sample-job-%'").run();
+    } catch {
+      // Ignore if table was just created
+    }
 
     dbInstance = db;
     return dbInstance;
@@ -286,14 +292,9 @@ export function dbEnsureInitialData(): {
   settings: AppSettings;
 } {
   try {
-    let jobs = dbGetJobs();
+    let jobs = dbGetJobs().filter(j => j && j.id && !j.id.startsWith("sample-job-"));
     let profile = dbGetProfile();
     let settings = dbGetSettings();
-
-    if (!jobs || jobs.length === 0) {
-      dbSaveJobs(sampleJobPostings);
-      jobs = sampleJobPostings;
-    }
 
     if (!profile) {
       dbSaveProfile(defaultMasterProfile);
@@ -316,7 +317,7 @@ export function dbEnsureInitialData(): {
   } catch (err) {
     console.warn("dbEnsureInitialData fallback triggered:", err);
     return {
-      jobs: sampleJobPostings,
+      jobs: [],
       profile: defaultMasterProfile,
       settings: {
         aiProvider: "demo",

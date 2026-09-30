@@ -1,6 +1,5 @@
 import { AppSettings, JobPosting, MasterProfile } from "@/types";
 import { defaultMasterProfile } from "@/data/defaultProfile";
-import { sampleJobPostings } from "@/data/sampleJobs";
 
 const STORAGE_KEYS = {
   JOBS: "jobot_saved_jobs_v1",
@@ -20,20 +19,23 @@ export const defaultSettings: AppSettings = {
 const isBrowser = typeof window !== "undefined";
 
 export function getStoredJobs(): JobPosting[] {
-  if (!isBrowser) return sampleJobPostings;
+  if (!isBrowser) return [];
   try {
     const raw = localStorage.getItem(STORAGE_KEYS.JOBS);
     if (!raw) {
-      localStorage.setItem(STORAGE_KEYS.JOBS, JSON.stringify(sampleJobPostings));
-      return sampleJobPostings;
+      localStorage.setItem(STORAGE_KEYS.JOBS, JSON.stringify([]));
+      return [];
     }
     const parsed = JSON.parse(raw);
-    if (!Array.isArray(parsed)) return sampleJobPostings;
+    if (!Array.isArray(parsed)) return [];
+
+    // Filter out dummy/sample jobs
+    const nonSample = parsed.filter((job: JobPosting) => job && job.id && !job.id.startsWith("sample-job-"));
+    let hasModified = nonSample.length !== parsed.length;
 
     // Sanitize any missing or duplicate IDs from previous scans
     const seenIds = new Set<string>();
-    let hasModified = false;
-    const sanitized: JobPosting[] = parsed.map((job: JobPosting, idx: number) => {
+    const sanitized: JobPosting[] = nonSample.map((job: JobPosting, idx: number) => {
       if (!job.id || seenIds.has(job.id)) {
         hasModified = true;
         const newId = `${job.platform || "job"}-${Date.now().toString(36)}-${Math.random().toString(36).substring(2, 7)}-${idx}`;
@@ -46,11 +48,12 @@ export function getStoredJobs(): JobPosting[] {
 
     if (hasModified) {
       localStorage.setItem(STORAGE_KEYS.JOBS, JSON.stringify(sanitized));
+      syncDbAction({ action: "saveJobs", jobs: sanitized });
     }
     return sanitized;
   } catch (error) {
     console.error("Error reading jobs from localStorage:", error);
-    return sampleJobPostings;
+    return [];
   }
 }
 
@@ -123,10 +126,10 @@ export function deleteJob(id: string): JobPosting[] {
 
 export function resetJobsToDefault(): JobPosting[] {
   if (isBrowser) {
-    localStorage.setItem(STORAGE_KEYS.JOBS, JSON.stringify(sampleJobPostings));
+    localStorage.setItem(STORAGE_KEYS.JOBS, JSON.stringify([]));
   }
-  syncDbAction({ action: "saveJobs", jobs: sampleJobPostings });
-  return sampleJobPostings;
+  syncDbAction({ action: "saveJobs", jobs: [] });
+  return [];
 }
 
 export function getStoredProfile(): MasterProfile {

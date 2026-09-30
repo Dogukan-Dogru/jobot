@@ -11,7 +11,6 @@ import {
   dbSaveSettings 
 } from "@/lib/db";
 import { JobPosting, MasterProfile, AppSettings } from "@/types";
-import { sampleJobPostings } from "@/data/sampleJobs";
 import { defaultMasterProfile } from "@/data/defaultProfile";
 
 export async function GET() {
@@ -27,7 +26,7 @@ export async function GET() {
     console.warn("GET /api/db fallback warning:", err);
     return NextResponse.json({
       success: true,
-      jobs: sampleJobPostings,
+      jobs: [],
       profile: defaultMasterProfile,
       settings: {
         aiProvider: "demo",
@@ -56,10 +55,11 @@ export async function POST(req: NextRequest) {
       }
 
       case "saveJobs": {
-        const jobs = body.jobs as JobPosting[];
-        if (!Array.isArray(jobs)) {
+        const rawJobs = body.jobs as JobPosting[];
+        if (!Array.isArray(rawJobs)) {
           return NextResponse.json({ error: "Invalid jobs array" }, { status: 400 });
         }
+        const jobs = rawJobs.filter(j => j && j.id && !j.id.startsWith("sample-job-"));
         dbSaveJobs(jobs);
         return NextResponse.json({ success: true, count: jobs.length });
       }
@@ -95,7 +95,8 @@ export async function POST(req: NextRequest) {
         // If the browser already has customized jobs/profile, persist them all into DB
         const { jobs, profile, settings } = body;
         if (Array.isArray(jobs) && jobs.length > 0) {
-          dbSaveJobs(jobs);
+          const cleanJobs = jobs.filter((j: JobPosting) => j && j.id && !j.id.startsWith("sample-job-"));
+          dbSaveJobs(cleanJobs);
         }
         if (profile) {
           dbSaveProfile(profile);

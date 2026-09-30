@@ -66,9 +66,13 @@ export default function Home() {
     async function syncWithBackendDb() {
       try {
         const dbData = await fetchDbInitialData();
-        if (dbData && dbData.jobs && Array.isArray(dbData.jobs) && dbData.jobs.length > 0) {
-          // If SQLite has stored jobs, use them as source of truth
-          setJobs(dbData.jobs);
+        if (dbData && dbData.jobs && Array.isArray(dbData.jobs)) {
+          const cleanJobs = dbData.jobs.filter((j: JobPosting) => j && j.id && !j.id.startsWith("sample-job-"));
+          if (cleanJobs.length > 0) {
+            setJobs(cleanJobs);
+          } else if (localJobs.length === 0) {
+            setJobs([]);
+          }
           if (dbData.profile) setProfile(dbData.profile);
           if (dbData.settings) setSettings(dbData.settings);
         } else if (localJobs.length > 0) {
