@@ -14,8 +14,10 @@ TARGET GEOGRAPHY & ELIGIBILITY RULES:
 - The candidate lives in Türkiye.
 - The candidate seeks international roles (US, UK, Europe, Global Remote) and local Türkiye roles.
 - NEVER assume "Remote" means worldwide remote.
-- If "Remote within EU / US / UK only" or "Must have local work permit / No visa sponsorship", flag it immediately.
-- If Türkiye is eligible (e.g. Worldwide remote, EOR/Deel, or Visa Sponsorship / Relocation offered), mark eligible.
+- If "Remote within EU / US / UK only" or "Remote from: USA/UK" or "Must have local work permit / No visa sponsorship", flag it immediately as NOT eligible from Turkey (canApplyFromTurkey: false, finalVerdict: "SKIP").
+- CRITICAL: If an overseas job requires candidates to reside in the US (e.g. "Remote from: USA", "US Only", "Must reside in the US", "located in San Francisco/New York") and does NOT offer visa sponsorship or relocation, set canApplyFromTurkey: false and finalVerdict: "SKIP", regardless of skill match.
+- If Türkiye is eligible (e.g. Worldwide remote, EOR/Deel, or Visa Sponsorship / Relocation offered), mark eligible (canApplyFromTurkey: true).
+- If canApplyFromTurkey is false, finalVerdict MUST ALWAYS be "SKIP".
 - IMPORTANT RULE ON ROLES: Do NOT evaluate the candidate only through a Product Management title lens. The candidate has performed substantial technical project management, delivery coordination, SDK release management, and EMVCo certification processes. Identify transferable project management skills for Project Manager roles.
 - NEVER fabricate experience. If a requirement is missing, label it as a GAP.
 
@@ -90,9 +92,164 @@ Output strictly valid JSON matching this schema:
 }`;
 }
 
+// Parse & normalize raw geo/location strings into structured location & country
+export function parseGeoLocation(rawGeo: string | undefined | null): {
+  location: string;
+  country: string;
+} {
+  const geo = (rawGeo || "").trim();
+  if (!geo) {
+    return { location: "Worldwide Remote", country: "Worldwide Remote" };
+  }
+
+  const lower = geo.toLowerCase();
+
+  // Turkey
+  if (
+    lower.includes("turkey") ||
+    lower.includes("türkiye") ||
+    lower.includes("istanbul") ||
+    lower.includes("ankara") ||
+    lower.includes("izmir")
+  ) {
+    return {
+      location: geo || "Türkiye",
+      country: "Türkiye"
+    };
+  }
+
+  // USA / United States
+  const isUsMatch = 
+    lower === "usa" ||
+    lower === "us" ||
+    lower === "united states" ||
+    lower === "usa only" ||
+    lower === "us only" ||
+    lower.includes("united states") ||
+    lower.endsWith(", us") ||
+    lower.endsWith(", usa") ||
+    lower.endsWith(", ca") ||
+    lower.endsWith(", tx") ||
+    lower.endsWith(", ny") ||
+    lower.endsWith(", wa") ||
+    lower.endsWith(", fl") ||
+    lower.endsWith(", ma") ||
+    lower.endsWith(", il") ||
+    lower.endsWith(", co") ||
+    /\b(usa|u\.s\.a\.|u\.s\.)\b/i.test(geo) ||
+    (/\bus\b/i.test(geo) && !lower.includes("cyprus") && !lower.includes("belarus") && !lower.includes("russia") && !lower.includes("austria"));
+
+  if (isUsMatch) {
+    const locDisplay = lower.includes("only") || lower.includes("remote") 
+      ? geo 
+      : `${geo} (Remote - US Only)`;
+    return {
+      location: locDisplay,
+      country: "United States"
+    };
+  }
+
+  // UK / United Kingdom
+  const isUkMatch =
+    lower === "uk" ||
+    lower === "united kingdom" ||
+    lower === "uk only" ||
+    lower.includes("united kingdom") ||
+    lower.includes("london") ||
+    lower.includes("england") ||
+    /\buk\b/i.test(geo);
+
+  if (isUkMatch) {
+    const locDisplay = lower.includes("only") || lower.includes("remote") 
+      ? geo 
+      : `${geo} (Remote - UK Only)`;
+    return {
+      location: locDisplay,
+      country: "United Kingdom"
+    };
+  }
+
+  // Canada
+  if (lower.includes("canada") || lower === "ca" || lower === "canada only") {
+    return {
+      location: lower.includes("only") || lower.includes("remote") ? geo : `${geo} (Remote - Canada Only)`,
+      country: "Canada"
+    };
+  }
+
+  // Specific European countries
+  const euCountries = [
+    "germany", "deutschland", "berlin", "munich",
+    "spain", "españa", "madrid", "barcelona",
+    "france", "paris",
+    "netherlands", "amsterdam",
+    "ireland", "dublin",
+    "poland", "warsaw",
+    "italy", "rome", "milan",
+    "switzerland", "zurich",
+    "sweden", "stockholm",
+    "portugal", "lisbon"
+  ];
+
+  for (const c of euCountries) {
+    if (lower.includes(c)) {
+      const countryName = c.charAt(0).toUpperCase() + c.slice(1);
+      return {
+        location: lower.includes("remote") ? geo : `${geo} (Remote - ${countryName} Only)`,
+        country: countryName
+      };
+    }
+  }
+
+  // Europe / EU / EMEA
+  if (
+    lower.includes("europe") ||
+    lower.includes("emea") ||
+    lower === "eu" ||
+    lower.includes("european union")
+  ) {
+    return {
+      location: lower.includes("remote") ? geo : `${geo} (Europe Remote)`,
+      country: "Europe"
+    };
+  }
+
+  // Latin America / APAC
+  if (lower.includes("latin america") || lower.includes("latam")) {
+    return { location: `${geo} (LATAM Remote)`, country: "Latin America" };
+  }
+  if (lower.includes("apac") || lower.includes("asia")) {
+    return { location: `${geo} (APAC Remote)`, country: "APAC" };
+  }
+
+  // Worldwide / Anywhere / Global
+  if (
+    lower.includes("worldwide") ||
+    lower.includes("anywhere") ||
+    lower.includes("global") ||
+    lower.includes("all")
+  ) {
+    return {
+      location: "Worldwide Remote",
+      country: "Worldwide Remote"
+    };
+  }
+
+  return {
+    location: geo,
+    country: geo
+  };
+}
+
 // Built-in intelligent heuristic engine (Runs 100% offline / without API key)
 export function runHeuristicAnalysis(job: JobPosting, profile: MasterProfile): JobAnalysis {
-  const text = (job.title + " " + job.company + " " + job.location + " " + job.rawDescription).toLowerCase();
+  // Normalize geo to avoid default fallbacks overriding real locations
+  const normalizedGeo = parseGeoLocation(job.location || job.country);
+  const effectiveCountry = (job.country && job.country !== "Worldwide Remote") ? job.country : normalizedGeo.country;
+  const effectiveLocation = job.location || normalizedGeo.location;
+
+  const text = (job.title + " " + job.company + " " + effectiveLocation + " " + effectiveCountry + " " + job.rawDescription).toLowerCase();
+  const locLower = (effectiveLocation + " " + effectiveCountry).toLowerCase();
   
   // 1. Role classification
   let roleType: JobAnalysis["roleType"] = "PRODUCT";
@@ -127,36 +284,83 @@ export function runHeuristicAnalysis(job: JobPosting, profile: MasterProfile): J
   // 2. Eligibility checks
   const hasNoSponsorship = 
     text.includes("no visa sponsorship") || 
+    text.includes("without sponsorship") ||
+    text.includes("cannot provide sponsorship") ||
+    text.includes("will not sponsor") ||
+    text.includes("not sponsoring") ||
     text.includes("must have the right to work") || 
     text.includes("unrestricted right to work") ||
     text.includes("vize sponsoru sağlanmamaktadır") ||
     text.includes("us citizenship required") ||
-    text.includes("authorised to work in");
+    text.includes("authorised to work in") ||
+    text.includes("authorized to work in the united states") ||
+    text.includes("authorized to work in the us") ||
+    text.includes("legally authorized to work");
 
   const hasSponsorship = 
-    text.includes("visa sponsorship") || 
+    (text.includes("visa sponsorship") && !hasNoSponsorship) || 
     text.includes("sponsorship available") || 
     text.includes("relocation package") || 
     text.includes("relocation assistance") ||
     text.includes("relocation support");
 
   const isTurkeyJob = 
+    effectiveCountry.toLowerCase() === "türkiye" ||
+    locLower.includes("turkey") ||
+    locLower.includes("türkiye") || 
+    locLower.includes("istanbul") || 
+    locLower.includes("ankara") || 
+    locLower.includes("izmir") ||
     text.includes("türkiye") || 
-    text.includes("turkey") || 
-    text.includes("istanbul") || 
-    text.includes("ankara") || 
-    text.includes("izmir") ||
-    job.country.toLowerCase() === "türkiye";
+    text.includes("turkey");
 
-  const isWorldwideRemote = 
-    text.includes("anywhere") || 
-    text.includes("worldwide") || 
-    text.includes("global remote") || 
-    text.includes("work from anywhere") ||
-    text.includes("deel") ||
-    text.includes("eor");
+  // Country lock indicators
+  const isUsOnly = 
+    effectiveCountry === "United States" ||
+    locLower.includes("us only") ||
+    locLower.includes("usa only") ||
+    locLower.includes("remote - us") ||
+    locLower.includes("remote (us") ||
+    text.includes("remote from: usa") ||
+    text.includes("remote from: us") ||
+    text.includes("remote from usa") ||
+    text.includes("remote within us") ||
+    text.includes("remote within the us") ||
+    text.includes("remote in the us") ||
+    text.includes("us remote") ||
+    text.includes("united states remote") ||
+    text.includes("must be based in the us") ||
+    text.includes("must be based in the united states") ||
+    text.includes("must reside in the us") ||
+    text.includes("must reside in the united states") ||
+    text.includes("only open to candidates in the us") ||
+    text.includes("only open to candidates in the united states") ||
+    text.includes("reside in the united states") ||
+    text.includes("located in san francisco") ||
+    text.includes("located in new york") ||
+    text.includes("authorized to work in the united states without sponsorship") ||
+    text.includes("authorized to work in the us without sponsorship");
+
+  const isUkOnly =
+    effectiveCountry === "United Kingdom" ||
+    locLower.includes("uk only") ||
+    locLower.includes("remote - uk") ||
+    text.includes("remote from: uk") ||
+    text.includes("remote within the uk") ||
+    text.includes("must be based in the uk") ||
+    text.includes("must reside in the uk");
+
+  const isCanadaOnly =
+    effectiveCountry === "Canada" ||
+    locLower.includes("canada only") ||
+    text.includes("must be based in canada") ||
+    text.includes("remote within canada");
 
   const isRestrictedRemote = 
+    isUsOnly ||
+    isUkOnly ||
+    isCanadaOnly ||
+    locLower.includes("only") ||
     text.includes("remote within us") || 
     text.includes("us only") || 
     text.includes("uk only") || 
@@ -165,8 +369,9 @@ export function runHeuristicAnalysis(job: JobPosting, profile: MasterProfile): J
     text.includes("remote within eu only") ||
     text.includes("eu only");
 
-  // Detect country-locked remote (e.g. "must be based in Spain", "hiring specifically for this market")
+  // Detect country-locked remote (e.g. "must be based in Spain", "Remote from: USA")
   const countryLockPatterns = [
+    /remote from:?\s*(?:usa|us|united states|uk|canada|spain|germany|france|australia|italy|netherlands)/i,
     /must be based in (?:the )?([a-z\s]+)/i,
     /should already be based in (?:the )?([a-z\s]+)/i,
     /must reside in (?:the )?([a-z\s]+)/i,
@@ -181,25 +386,58 @@ export function runHeuristicAnalysis(job: JobPosting, profile: MasterProfile): J
     /based in spain/i,
     /based in the uk/i,
     /based in the us/i,
+    /based in the united states/i,
     /based in germany/i,
     /based in france/i
   ];
 
   let isCountryLocked = false;
   let lockedReason = "";
-  if (!isTurkeyJob && !isWorldwideRemote) {
-    for (const pat of countryLockPatterns) {
-      const match = text.match(pat);
-      if (match) {
-        const matchedText = match[0].toLowerCase();
-        if (!matchedText.includes("turkey") && !matchedText.includes("türkiye")) {
-          isCountryLocked = true;
-          lockedReason = match[0];
-          break;
+
+  if (!isTurkeyJob && !hasSponsorship) {
+    if (isUsOnly) {
+      isCountryLocked = true;
+      lockedReason = "Yalnızca ABD (USA) sınırları içinden uzaktan çalışma kabul ediliyor (Remote from: USA / US Only)";
+    } else if (isUkOnly) {
+      isCountryLocked = true;
+      lockedReason = "Yalnızca Birleşik Krallık (UK) sınırları içinden uzaktan çalışma kabul ediliyor (UK Only)";
+    } else if (isCanadaOnly) {
+      isCountryLocked = true;
+      lockedReason = "Yalnızca Kanada (Canada) sınırları içinden uzaktan çalışma kabul ediliyor (Canada Only)";
+    } else {
+      for (const pat of countryLockPatterns) {
+        const match = text.match(pat);
+        if (match) {
+          const matchedText = match[0].toLowerCase();
+          if (!matchedText.includes("turkey") && !matchedText.includes("türkiye")) {
+            isCountryLocked = true;
+            lockedReason = match[0];
+            break;
+          }
         }
       }
     }
   }
+
+  // Worldwide Remote check: ONLY valid if not locked to a specific country
+  const hasWorldwideInGeo = 
+    effectiveCountry.toLowerCase() === "worldwide remote" ||
+    locLower.includes("worldwide") ||
+    locLower.includes("global remote") ||
+    locLower.includes("anywhere remote");
+
+  const hasWorldwideInText =
+    text.includes("work from anywhere") ||
+    text.includes("remote worldwide") ||
+    text.includes("remote - worldwide") ||
+    text.includes("worldwide remote") ||
+    text.includes("anywhere in the world") ||
+    text.includes("hire globally") ||
+    text.includes("hire anywhere") ||
+    /\bdeel\b/i.test(text) ||
+    /\b(eor|employer of record)\b/i.test(text);
+
+  const isWorldwideRemote = !isCountryLocked && (hasWorldwideInGeo || hasWorldwideInText);
 
   let canApplyFromTurkey: boolean | "unclear" = "unclear";
   let remoteFromTurkey: boolean | "unclear" = "unclear";
@@ -216,7 +454,7 @@ export function runHeuristicAnalysis(job: JobPosting, profile: MasterProfile): J
     canApplyFromTurkey = false;
     remoteFromTurkey = false;
     visaSponsorship = "not_offered";
-    eligibilitySummary = `İlan uzaktan çalışma (remote) görünse de adayın yerel olarak o ülkede ikamet etmesini zorunlu tutuyor ("${lockedReason}"). Türkiye'de ikamet eden adaylar için uygun değildir.`;
+    eligibilitySummary = `İlan uzaktan çalışma (remote) görünse de adayın ilgili ülkede yerel ikamet etmesini şart koşuyor (${lockedReason}). Vize veya relokasyon desteği bulunmadığından Türkiye'de ikamet eden adaylar için uygun değildir.`;
   } else if (hasNoSponsorship && (isRestrictedRemote || job.workModel === "onsite" || job.workModel === "hybrid")) {
     canApplyFromTurkey = false;
     remoteFromTurkey = false;
@@ -234,7 +472,10 @@ export function runHeuristicAnalysis(job: JobPosting, profile: MasterProfile): J
     visaSponsorship = "unclear";
     eligibilitySummary = "Global / Worldwide remote ve EOR desteği mevcut; Türkiye'den çalışılabilir.";
   } else {
-    eligibilitySummary = "Sponsorluk ve Türkiye'den remote çalışma şartları ilanda net belirtilmemiş; teyit gerekebilir.";
+    canApplyFromTurkey = "unclear";
+    remoteFromTurkey = "unclear";
+    visaSponsorship = "unclear";
+    eligibilitySummary = "Sponsorluk ve Türkiye'den remote çalışma şartları ilanda net belirtilmemiş; başvuru öncesi teyit gerekebilir.";
   }
 
   // 3. Domain matches
@@ -272,12 +513,12 @@ export function runHeuristicAnalysis(job: JobPosting, profile: MasterProfile): J
 
   // Red flags
   if (isCountryLocked) {
-    redFlags.push(`Ülke kısıtlamalı sahte remote: Yalnızca ilgili ülkede yerel ikamet edenler kabul ediliyor ("${lockedReason}")`);
+    redFlags.push(`Ülke kısıtlamalı remote: Yalnızca ilgili ülkede yerel ikamet edenler kabul ediliyor (${lockedReason})`);
   }
   if (hasNoSponsorship && !isTurkeyJob) {
     redFlags.push("Vize sponsorluğu sunulmuyor (No sponsorship)");
   }
-  if (isRestrictedRemote) {
+  if (isRestrictedRemote && !isCountryLocked) {
     redFlags.push("Remote çalışma belirli bir ülke/bölge (EU/US/UK) ile sınırlandırılmış");
   }
   if (text.includes("7+ years") || text.includes("8+ years") || text.includes("10+ years") || text.includes("director")) {
@@ -291,19 +532,24 @@ export function runHeuristicAnalysis(job: JobPosting, profile: MasterProfile): J
 
   if (isCountryLocked) {
     finalVerdict = "SKIP";
-    oneSentenceReason = `İlan uzaktan çalışma (remote) görünse de adayın o ülkede yerel ikamet etmesini şart koşuyor ("${lockedReason}"); Türkiye'den başvuruya kapalıdır.`;
+    oneSentenceReason = `İlan uzaktan çalışma (remote) görünse de yalnızca ilgili ülkede yerel ikamet edenleri kabul ediyor (${lockedReason}); Türkiye'den başvuruya kapalıdır.`;
   } else if (hasNoSponsorship && !isTurkeyJob && !isWorldwideRemote) {
     finalVerdict = "SKIP";
     oneSentenceReason = "Teknik gereksinimler uygun olsa da vize sponsorluğu verilmiyor ve yerel çalışma izni zorunlu tutuluyor.";
-  } else if (strongMatches.length >= 2 && canApplyFromTurkey !== false) {
+  } else if (canApplyFromTurkey === false) {
+    finalVerdict = "SKIP";
+    oneSentenceReason = "Lokasyon ve yasal kısıtlar nedeniyle Türkiye'den başvuruya uygun değildir.";
+  } else if (strongMatches.length >= 2 && canApplyFromTurkey === true) {
     finalVerdict = "APPLY";
     oneSentenceReason = `İlandaki temel gereksinimler (${strongMatches[0] || "fintech/ürün yönetimi"}) adayın deneyimiyle güçlü şekilde örtüşüyor.`;
-  } else if (gaps.length > 2 || canApplyFromTurkey === false) {
+  } else if (gaps.length > 2) {
     finalVerdict = "SKIP";
     oneSentenceReason = "Deneyim eksiklikleri veya lokasyon kısıtları nedeniyle başvuru öncelikli önerilmiyor.";
   } else {
     finalVerdict = "CONSIDER";
-    oneSentenceReason = "Profil ile uyumlu noktalar bulunuyor ancak çalışma şartları veya detayların teyit edilmesi tavsiye edilir.";
+    oneSentenceReason = canApplyFromTurkey === "unclear"
+      ? "Rol gereksinimleri profille örtüşüyor ancak Türkiye'den uzaktan çalışılabilirlik veya vize durumu ilanda net değil; teyit önerilir."
+      : "Profil ile uyumlu noktalar bulunuyor ancak çalışma şartları veya detayların teyit edilmesi tavsiye edilir.";
   }
 
   return {

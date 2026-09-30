@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { JobPosting, MasterProfile, AppSettings } from "@/types";
-import { runHeuristicAnalysis } from "@/lib/aiService";
+import { runHeuristicAnalysis, parseGeoLocation } from "@/lib/aiService";
 import crypto from "crypto";
 
 // Helper to strip HTML tags
@@ -144,15 +144,16 @@ export async function POST(req: NextRequest) {
               if (urlKey) seenUrls.add(urlKey);
 
               const company = companies[i] || "LinkedIn Company";
-              const location = locations[i] || "Turkey / Remote";
+              const rawLoc = locations[i] || "Turkey / Remote";
+              const { location, country } = parseGeoLocation(rawLoc);
 
               const newJob: JobPosting = {
                 id: `live-linkedin-${crypto.randomUUID()}`,
                 title,
                 company,
                 location,
-                country: location.includes("Turkey") || location.includes("Istanbul") ? "Türkiye" : "Global Remote",
-                workModel: location.toLowerCase().includes("remote") ? "remote" : "hybrid",
+                country,
+                workModel: rawLoc.toLowerCase().includes("remote") ? "remote" : "hybrid",
                 platform: "linkedin",
                 sourceUrl: url,
                 rawDescription: `${company} bünyesinde ${title} pozisyonu. Lokasyon: ${location}.\nDetaylı görev tanımı ve başvuru için LinkedIn bağlantısını ziyaret ediniz.`,
@@ -276,7 +277,7 @@ export async function POST(req: NextRequest) {
             if (urlKey) seenUrls.add(urlKey);
 
             const desc = stripHtml(item.description || "");
-            const location = item.location || "Worldwide Remote";
+            const { location, country } = parseGeoLocation(item.location);
             const salary = (item.salary_min && item.salary_max) 
               ? `$${Math.round(item.salary_min / 1000)}k - $${Math.round(item.salary_max / 1000)}k` 
               : undefined;
@@ -286,7 +287,7 @@ export async function POST(req: NextRequest) {
               title,
               company: item.company || "Remote Company",
               location,
-              country: location.toLowerCase().includes("us") ? "United States" : "Worldwide Remote",
+              country,
               workModel: "remote",
               platform: "remoteok",
               salary,
@@ -343,14 +344,14 @@ export async function POST(req: NextRequest) {
                 if (urlKey) seenUrls.add(urlKey);
 
                 const desc = stripHtml(item.jobDescription || item.jobExcerpt || "");
-                const location = item.jobGeo || "Worldwide Remote";
+                const { location, country } = parseGeoLocation(item.jobGeo);
 
                 const newJob: JobPosting = {
                   id: `live-jobicy-${crypto.randomUUID()}`,
                   title,
                   company: item.companyName || "Tech Company",
                   location,
-                  country: location.includes("Europe") ? "Europe" : "Worldwide Remote",
+                  country,
                   workModel: "remote",
                   platform: "company",
                   sourceUrl: url,
@@ -397,14 +398,14 @@ export async function POST(req: NextRequest) {
                 if (urlKey) seenUrls.add(urlKey);
 
                 const desc = stripHtml(item.description || "");
-                const location = item.candidate_required_location || "Worldwide";
+                const { location, country } = parseGeoLocation(item.candidate_required_location);
 
                 const newJob: JobPosting = {
                   id: `live-remotive-${crypto.randomUUID()}`,
                   title,
                   company: item.company_name || "Tech Company",
                   location,
-                  country: location.includes("Europe") ? "Europe" : location.includes("USA") ? "United States" : "Worldwide Remote",
+                  country,
                   workModel: "remote",
                   platform: "company",
                   salary: item.salary || undefined,
@@ -435,12 +436,17 @@ export async function POST(req: NextRequest) {
     // Execute all sources concurrently
     await Promise.allSettled(tasks);
 
-    // Sort with APPLY first, then CONSIDER, then SKIP (including country-locked ones) at the very bottom
+    // Sort with APPLY first, then CONSIDER, then SKIP (including country-locked ones) at the very bottom.
+    // Within the same verdict, push jobs ineligible from Turkey (canApplyFromTurkey === false) after others.
     const verdictPriority: Record<string, number> = { APPLY: 1, CONSIDER: 2, SKIP: 3 };
     fetchedJobs.sort((a, b) => {
       const vA = a.analysis?.finalVerdict ? verdictPriority[a.analysis.finalVerdict] || 99 : 99;
       const vB = b.analysis?.finalVerdict ? verdictPriority[b.analysis.finalVerdict] || 99 : 99;
-      return vA - vB;
+      if (vA !== vB) return vA - vB;
+
+      const trA = a.analysis?.eligibility.canApplyFromTurkey === false ? 2 : 1;
+      const trB = b.analysis?.eligibility.canApplyFromTurkey === false ? 2 : 1;
+      return trA - trB;
     });
 
     return NextResponse.json({
