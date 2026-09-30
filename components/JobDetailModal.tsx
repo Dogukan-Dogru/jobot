@@ -148,7 +148,9 @@ export const JobDetailModal: React.FC<JobDetailModalProps> = ({
                 <span>•</span>
                 <span className="flex items-center gap-1">
                   <MapPin className="w-3.5 h-3.5 text-slate-400" />
-                  {job.location} ({job.country})
+                  {job.location === job.country || job.location.toLowerCase().includes(job.country.toLowerCase()) 
+                    ? job.location 
+                    : `${job.location} (${job.country})`}
                 </span>
               </div>
             </div>

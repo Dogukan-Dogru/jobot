@@ -61,6 +61,7 @@ export const AddJobModal: React.FC<AddJobModalProps> = ({
       if (data.platform) setPlatform(data.platform);
       if (data.suggestedTitle && !title) setTitle(data.suggestedTitle);
       if (data.suggestedDescription && !rawDescription) setRawDescription(data.suggestedDescription);
+      if (data.suggestedWorkModel) setWorkModel(data.suggestedWorkModel);
       setUrlFetchMessage(data.message || "Bağlantı algılandı.");
     } catch {
       setUrlFetchMessage("Bağlantı otomatik taranamadı. Lütfen ilan metnini elle yapıştırınız.");
@@ -312,7 +313,18 @@ Aranan Nitelikler:
                 type="text"
                 required
                 value={title}
-                onChange={(e) => setTitle(e.target.value)}
+                onChange={(e) => {
+                  const val = e.target.value;
+                  setTitle(val);
+                  const low = val.toLowerCase();
+                  if (low.includes("(hybrid)") || low.includes("[hybrid]") || low.includes("(hibrit)") || low.includes("[hibrit]")) {
+                    setWorkModel("hybrid");
+                  } else if (low.includes("(onsite)") || low.includes("[onsite]") || low.includes("(on-site)")) {
+                    setWorkModel("onsite");
+                  } else if (low.includes("(remote)") || low.includes("[remote]") || low.includes("(uzaktan)")) {
+                    setWorkModel("remote");
+                  }
+                }}
                 placeholder="Örn: Senior Product Manager - Payments"
                 className="w-full px-3 py-2 text-sm border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500"
               />

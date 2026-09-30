@@ -17,8 +17,9 @@ TARGET GEOGRAPHY & ELIGIBILITY RULES:
 - STRICT VISA RULE: For any overseas/international role (outside Türkiye), if the job does NOT explicitly offer Visa Sponsorship or Relocation, and is NOT confirmed 100% Worldwide Remote (work from anywhere via EOR/contractor), you MUST set canApplyFromTurkey: false, visaSponsorship: "not_offered", and finalVerdict: "SKIP". Do NOT classify overseas jobs without visa sponsorship as "CONSIDER"!
 - If "Remote within EU / US / UK only" or "Remote from: USA/UK" or "Must have local work permit / No visa sponsorship", flag it immediately as NOT eligible from Turkey (canApplyFromTurkey: false, finalVerdict: "SKIP").
 - CRITICAL: If an overseas job requires candidates to reside in the US (e.g. "Remote from: USA", "US Only", "Must reside in the US", "located in San Francisco/New York") and does NOT offer visa sponsorship or relocation, set canApplyFromTurkey: false and finalVerdict: "SKIP", regardless of skill match.
+- STRICT HYBRID / ON-SITE RULE: For any overseas/international role (outside Türkiye), if the job is HYBRID or ON-SITE (e.g. requires office attendance, has '(hybrid)', '[hybrid]', 'hybrid', 'hibrit', 'on-site', 'in-office') and does NOT explicitly provide Visa Sponsorship AND Relocation, it CANNOT be worked from Türkiye. You MUST set canApplyFromTurkey: false, remoteFromTurkey: false, visaSponsorship: "not_offered", and finalVerdict: "SKIP". Foreign hybrid jobs CANNOT be worked remotely from Türkiye via EOR!
 - If the job is located in Türkiye, visa is not required (canApplyFromTurkey: true).
-- If Türkiye is eligible (e.g. Worldwide remote, EOR/Deel, or Visa Sponsorship / Relocation offered), mark eligible (canApplyFromTurkey: true).
+- If Türkiye is eligible (e.g. 100% Worldwide remote without country lock, EOR/Deel, or Visa Sponsorship / Relocation offered), mark eligible (canApplyFromTurkey: true).
 - If canApplyFromTurkey is false, finalVerdict MUST ALWAYS be "SKIP".
 - IMPORTANT RULE ON ROLES: Do NOT evaluate the candidate only through a Product Management title lens. The candidate has performed substantial technical project management, delivery coordination, SDK release management, and EMVCo certification processes. Identify transferable project management skills for Project Manager roles.
 - NEVER fabricate experience. If a requirement is missing, label it as a GAP.
@@ -224,13 +225,56 @@ export function parseGeoLocation(rawGeo: string | undefined | null): {
     return { location: `${geo} (APAC Remote)`, country: "APAC" };
   }
 
+  // Australia / Oceania
+  const isAusMatch =
+    lower.includes("australia") ||
+    lower.includes("sydney") ||
+    lower.includes("melbourne") ||
+    lower.includes("brisbane") ||
+    lower.includes("perth") ||
+    lower.includes("adelaide") ||
+    lower.includes("canberra") ||
+    /\b(aus|nsw|vic|qld|wa)\b/i.test(geo);
+
+  if (isAusMatch) {
+    const locDisplay = lower.includes("only") || lower.includes("remote") 
+      ? geo 
+      : `${geo} (Australia)`;
+    return {
+      location: locDisplay,
+      country: "Australia"
+    };
+  }
+
+  if (lower.includes("new zealand") || lower.includes("auckland") || lower.includes("wellington") || /\bnz\b/i.test(geo)) {
+    return {
+      location: lower.includes("only") || lower.includes("remote") ? geo : `${geo} (New Zealand)`,
+      country: "New Zealand"
+    };
+  }
+
+  // Asia / Middle East
+  if (lower.includes("singapore")) return { location: geo, country: "Singapore" };
+  if (lower.includes("japan") || lower.includes("tokyo")) return { location: geo, country: "Japan" };
+  if (lower.includes("india") || lower.includes("bengaluru") || lower.includes("bangalore")) return { location: geo, country: "India" };
+  if (lower.includes("dubai") || lower.includes("united arab emirates") || lower.includes("uae")) return { location: geo, country: "United Arab Emirates" };
+
   // Worldwide / Anywhere / Global
-  if (
+  const isWorldwideTerm =
     lower.includes("worldwide") ||
     lower.includes("anywhere") ||
     lower.includes("global") ||
-    lower.includes("all")
-  ) {
+    lower === "all" ||
+    lower.includes("all locations") ||
+    lower.includes("all regions");
+
+  if (isWorldwideTerm) {
+    if (lower.includes("hybrid") || lower.includes("hibrit")) {
+      return {
+        location: geo || "Worldwide (Hybrid)",
+        country: "International"
+      };
+    }
     return {
       location: "Worldwide Remote",
       country: "Worldwide Remote"
@@ -241,6 +285,61 @@ export function parseGeoLocation(rawGeo: string | undefined | null): {
     location: geo,
     country: geo
   };
+}
+
+// Helper to reliably detect work model from title, location, or job description
+export function detectWorkModel(
+  title: string = "",
+  location: string = "",
+  description: string = ""
+): "remote" | "hybrid" | "onsite" {
+  const combined = `${title} ${location} ${description}`.toLowerCase();
+
+  // Explicit hybrid indicators (parentheses, brackets, or keywords)
+  if (
+    combined.includes("(hybrid)") ||
+    combined.includes("[hybrid]") ||
+    combined.includes("(hibrit)") ||
+    combined.includes("[hibrit]") ||
+    /\b(hybrid|hibrit)\b/i.test(title) ||
+    /\b(hybrid|hibrit)\b/i.test(location) ||
+    /\b(days? (?:in|a|per) (?:the )?office|office-based|in-office|office attendance)\b/i.test(combined) ||
+    /\bhybrid and flexible\b/i.test(combined) ||
+    /\bhybrid working\b/i.test(combined)
+  ) {
+    return "hybrid";
+  }
+
+  // Explicit onsite indicators
+  if (
+    combined.includes("(onsite)") ||
+    combined.includes("[onsite]") ||
+    combined.includes("(on-site)") ||
+    combined.includes("[on-site]") ||
+    /\b(onsite|on-site)\b/i.test(title) ||
+    /\b(onsite|on-site)\b/i.test(location) ||
+    /\b(onsite|on-site)\b/i.test(combined)
+  ) {
+    return "onsite";
+  }
+
+  // Explicit remote indicators
+  if (
+    combined.includes("(remote)") ||
+    combined.includes("[remote]") ||
+    combined.includes("(uzaktan)") ||
+    combined.includes("[uzaktan]") ||
+    /\bremote\b/i.test(title) ||
+    /\bremote\b/i.test(location) ||
+    combined.includes("remote") ||
+    combined.includes("uzaktan") ||
+    combined.includes("work from anywhere") ||
+    combined.includes("telework")
+  ) {
+    return "remote";
+  }
+
+  return "hybrid";
 }
 
 // Built-in intelligent heuristic engine (Runs 100% offline / without API key)
@@ -447,9 +546,22 @@ export function runHeuristicAnalysis(job: JobPosting, profile: MasterProfile): J
     }
   }
 
-  // Worldwide Remote check: ONLY valid if not locked to a specific country
+  // Check if job is hybrid or on-site
+  const isHybridOrOnsite = 
+    job.workModel === "hybrid" || 
+    job.workModel === "onsite" ||
+    text.includes("(hybrid)") ||
+    text.includes("[hybrid]") ||
+    text.includes("(hibrit)") ||
+    text.includes("[hibrit]") ||
+    /\b(hybrid|hibrit|onsite|on-site)\b/i.test(job.title) ||
+    /\b(hybrid|hibrit|onsite|on-site)\b/i.test(job.location) ||
+    /\b(days? (?:in|a|per) (?:the )?office|office-based|in-office|office attendance)\b/i.test(text);
+
+  // Worldwide Remote check: ONLY valid if not locked to a specific country AND not hybrid/onsite
   const hasWorldwideInGeo = 
     !isCountryLocked &&
+    !isHybridOrOnsite &&
     (effectiveCountry.toLowerCase() === "worldwide remote" ||
     locLower === "worldwide remote" ||
     locLower === "global remote");
@@ -457,6 +569,7 @@ export function runHeuristicAnalysis(job: JobPosting, profile: MasterProfile): J
   const hasWorldwideInText =
     !isCountryLocked &&
     !isSpecificForeignCountry &&
+    !isHybridOrOnsite &&
     (
       text.includes("work from anywhere") ||
       text.includes("remote worldwide") ||
@@ -467,7 +580,7 @@ export function runHeuristicAnalysis(job: JobPosting, profile: MasterProfile): J
       /\b(eor|employer of record)\b/i.test(text)
     );
 
-  const isWorldwideRemote = !isCountryLocked && (hasWorldwideInGeo || hasWorldwideInText);
+  const isWorldwideRemote = !isCountryLocked && !isHybridOrOnsite && (hasWorldwideInGeo || hasWorldwideInText);
 
   let canApplyFromTurkey: boolean | "unclear" = "unclear";
   let remoteFromTurkey: boolean | "unclear" = "unclear";
@@ -480,6 +593,20 @@ export function runHeuristicAnalysis(job: JobPosting, profile: MasterProfile): J
     remoteFromTurkey = job.workModel === "remote" ? true : "unclear";
     visaSponsorship = "unclear";
     eligibilitySummary = "Pozisyon Türkiye merkezli olduğundan yasal veya lokasyon engeli bulunmuyor.";
+  } else if (isHybridOrOnsite) {
+    // Foreign hybrid or on-site role: strictly requires physical office attendance abroad!
+    if (hasSponsorship) {
+      canApplyFromTurkey = true;
+      remoteFromTurkey = false; // Cannot be remote from Turkey because of regular office attendance abroad
+      relocationOffered = true;
+      visaSponsorship = "offered";
+      eligibilitySummary = `İlan yurtdışında ${job.workModel === "onsite" ? "ofiste" : "hibrit"} çalışma modeli gerektirmektedir. Vize sponsorluğu ve relokasyon desteği belirtildiğinden taşınarak çalışma amacıyla Türkiye'den başvuruya uygundur.`;
+    } else {
+      canApplyFromTurkey = false;
+      remoteFromTurkey = false;
+      visaSponsorship = "not_offered";
+      eligibilitySummary = `İlan ${job.workModel === "onsite" ? "ofiste (on-site)" : "hibrit (ofis + ev)"} çalışma modeli gerektirmekte ve yurtdışındaki ofise fiziksel katılım beklemektedir. Vize sponsorluğu veya relokasyon desteği bulunmadığından Türkiye'de ikamet eden adaylar için uygun değildir.`;
+    }
   } else if (isCountryLocked) {
     canApplyFromTurkey = false;
     remoteFromTurkey = false;
@@ -543,10 +670,13 @@ export function runHeuristicAnalysis(job: JobPosting, profile: MasterProfile): J
   }
 
   // Red flags
+  if (!isTurkeyJob && isHybridOrOnsite && !hasSponsorship) {
+    redFlags.push(`Yurtdışı ofiste ${job.workModel === "onsite" ? "fiziki/ofis" : "hibrit"} katılım şartı (Vize/relokasyon desteği yok)`);
+  }
   if (isCountryLocked) {
     redFlags.push(`Ülke kısıtlamalı remote: Yalnızca ilgili ülkede yerel ikamet edenler kabul ediliyor (${lockedReason})`);
   }
-  if (!isTurkeyJob && !isWorldwideRemote && !hasSponsorship) {
+  if (!isTurkeyJob && !isWorldwideRemote && !hasSponsorship && !redFlags.some(r => r.includes("Vize sponsorluğu"))) {
     redFlags.push("Vize sponsorluğu sunulmuyor veya belirtilmemiş (Yurtdışı pozisyon)");
   }
   if (hasNoSponsorship && !isTurkeyJob && !redFlags.some(r => r.includes("Vize sponsorluğu"))) {
@@ -564,7 +694,10 @@ export function runHeuristicAnalysis(job: JobPosting, profile: MasterProfile): J
   let finalVerdict: JobAnalysis["finalVerdict"] = "CONSIDER";
   let oneSentenceReason = "";
 
-  if (isCountryLocked) {
+  if (canApplyFromTurkey === false) {
+    finalVerdict = "SKIP";
+    oneSentenceReason = eligibilitySummary || "Lokasyon ve yasal kısıtlar nedeniyle Türkiye'den başvuruya uygun değildir.";
+  } else if (isCountryLocked) {
     finalVerdict = "SKIP";
     oneSentenceReason = `İlan uzaktan çalışma (remote) görünse de yalnızca ilgili ülkede yerel ikamet edenleri kabul ediyor (${lockedReason}); Türkiye'den başvuruya kapalıdır.`;
   } else if (!isTurkeyJob && !isWorldwideRemote && !hasSponsorship) {
@@ -573,9 +706,6 @@ export function runHeuristicAnalysis(job: JobPosting, profile: MasterProfile): J
   } else if (hasNoSponsorship && !isTurkeyJob && !isWorldwideRemote) {
     finalVerdict = "SKIP";
     oneSentenceReason = "Teknik gereksinimler uygun olsa da vize sponsorluğu verilmiyor ve yerel çalışma izni zorunlu tutuluyor.";
-  } else if (canApplyFromTurkey === false) {
-    finalVerdict = "SKIP";
-    oneSentenceReason = "Lokasyon ve yasal kısıtlar nedeniyle Türkiye'den başvuruya uygun değildir.";
   } else if (strongMatches.length >= 2 && canApplyFromTurkey === true) {
     finalVerdict = "APPLY";
     oneSentenceReason = `İlandaki temel gereksinimler (${strongMatches[0] || "fintech/ürün yönetimi"}) adayın deneyimiyle güçlü şekilde örtüşüyor.`;

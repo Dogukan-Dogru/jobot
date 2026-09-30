@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { detectWorkModel } from "@/lib/aiService";
 
 export async function POST(req: NextRequest) {
   try {
@@ -45,11 +46,15 @@ export async function POST(req: NextRequest) {
                           html.match(/<meta\s+property=["']og:description["']\s+content=["']([^"']+)["']/i);
         const metaDesc = metaMatch ? metaMatch[1].trim() : "";
 
+        // Detect suggested work model from title and meta description
+        const suggestedWorkModel = detectWorkModel(extractedTitle, "", `${metaDesc} ${html.slice(0, 5000)}`);
+
         return NextResponse.json({
           success: true,
           platform,
           suggestedTitle: extractedTitle,
           suggestedDescription: metaDesc,
+          suggestedWorkModel,
           message: "İlan bilgileri bağlantıdan kısmen ayrıştırıldı. Detaylı analiz için ilan metnini kontrol ediniz."
         });
       }

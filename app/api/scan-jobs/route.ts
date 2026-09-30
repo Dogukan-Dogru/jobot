@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { JobPosting, MasterProfile, AppSettings } from "@/types";
-import { runHeuristicAnalysis, parseGeoLocation } from "@/lib/aiService";
+import { runHeuristicAnalysis, parseGeoLocation, detectWorkModel } from "@/lib/aiService";
 import crypto from "crypto";
 
 // Helper to strip HTML tags
@@ -153,7 +153,7 @@ export async function POST(req: NextRequest) {
                 company,
                 location,
                 country,
-                workModel: rawLoc.toLowerCase().includes("remote") ? "remote" : "hybrid",
+                workModel: detectWorkModel(title, rawLoc, `${company} ${title}`),
                 platform: "linkedin",
                 sourceUrl: url,
                 rawDescription: `${company} bünyesinde ${title} pozisyonu. Lokasyon: ${location}.\nDetaylı görev tanımı ve başvuru için LinkedIn bağlantısını ziyaret ediniz.`,
@@ -224,7 +224,7 @@ export async function POST(req: NextRequest) {
                 company: companyNameGuess.substring(0, 30),
                 location: "İstanbul / Türkiye",
                 country: "Türkiye",
-                workModel: "hybrid",
+                workModel: detectWorkModel(title, "İstanbul / Türkiye", companyNameGuess),
                 platform: "kariyer",
                 sourceUrl: rawUrl,
                 rawDescription: `Kariyer.net üzerinden yayınlanan ${title} ilanı.\nŞirket: ${companyNameGuess}.\nBaşvuru ve detaylar için Kariyer.net bağlantısını kullanabilirsiniz.`,
@@ -352,7 +352,7 @@ export async function POST(req: NextRequest) {
                   company: item.companyName || "Tech Company",
                   location,
                   country,
-                  workModel: "remote",
+                  workModel: detectWorkModel(title, location, desc),
                   platform: "company",
                   sourceUrl: url,
                   rawDescription: desc,
@@ -406,7 +406,7 @@ export async function POST(req: NextRequest) {
                   company: item.company_name || "Tech Company",
                   location,
                   country,
-                  workModel: "remote",
+                  workModel: detectWorkModel(title, location, desc),
                   platform: "company",
                   salary: item.salary || undefined,
                   sourceUrl: url,
