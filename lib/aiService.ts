@@ -14,8 +14,10 @@ TARGET GEOGRAPHY & ELIGIBILITY RULES:
 - The candidate lives in Türkiye.
 - The candidate seeks international roles (US, UK, Europe, Global Remote) and local Türkiye roles.
 - NEVER assume "Remote" means worldwide remote.
+- STRICT VISA RULE: For any overseas/international role (outside Türkiye), if the job does NOT explicitly offer Visa Sponsorship or Relocation, and is NOT confirmed 100% Worldwide Remote (work from anywhere via EOR/contractor), you MUST set canApplyFromTurkey: false, visaSponsorship: "not_offered", and finalVerdict: "SKIP". Do NOT classify overseas jobs without visa sponsorship as "CONSIDER"!
 - If "Remote within EU / US / UK only" or "Remote from: USA/UK" or "Must have local work permit / No visa sponsorship", flag it immediately as NOT eligible from Turkey (canApplyFromTurkey: false, finalVerdict: "SKIP").
 - CRITICAL: If an overseas job requires candidates to reside in the US (e.g. "Remote from: USA", "US Only", "Must reside in the US", "located in San Francisco/New York") and does NOT offer visa sponsorship or relocation, set canApplyFromTurkey: false and finalVerdict: "SKIP", regardless of skill match.
+- If the job is located in Türkiye, visa is not required (canApplyFromTurkey: true).
 - If Türkiye is eligible (e.g. Worldwide remote, EOR/Deel, or Visa Sponsorship / Relocation offered), mark eligible (canApplyFromTurkey: true).
 - If canApplyFromTurkey is false, finalVerdict MUST ALWAYS be "SKIP".
 - IMPORTANT RULE ON ROLES: Do NOT evaluate the candidate only through a Product Management title lens. The candidate has performed substantial technical project management, delivery coordination, SDK release management, and EMVCo certification processes. Identify transferable project management skills for Project Manager roles.
@@ -472,10 +474,11 @@ export function runHeuristicAnalysis(job: JobPosting, profile: MasterProfile): J
     visaSponsorship = "unclear";
     eligibilitySummary = "Global / Worldwide remote ve EOR desteği mevcut; Türkiye'den çalışılabilir.";
   } else {
-    canApplyFromTurkey = "unclear";
-    remoteFromTurkey = "unclear";
-    visaSponsorship = "unclear";
-    eligibilitySummary = "Sponsorluk ve Türkiye'den remote çalışma şartları ilanda net belirtilmemiş; başvuru öncesi teyit gerekebilir.";
+    // Overseas job without confirmed worldwide remote and without sponsorship
+    canApplyFromTurkey = false;
+    remoteFromTurkey = false;
+    visaSponsorship = "not_offered";
+    eligibilitySummary = "İlan yurtdışı merkezli olup Türkiye'den başvuru için vize sponsorluğu veya relokasyon desteği belirtilmemiştir. Vize sponsoru bulunmadığından Türkiye'den başvuruya uygun değildir.";
   }
 
   // 3. Domain matches
@@ -515,7 +518,10 @@ export function runHeuristicAnalysis(job: JobPosting, profile: MasterProfile): J
   if (isCountryLocked) {
     redFlags.push(`Ülke kısıtlamalı remote: Yalnızca ilgili ülkede yerel ikamet edenler kabul ediliyor (${lockedReason})`);
   }
-  if (hasNoSponsorship && !isTurkeyJob) {
+  if (!isTurkeyJob && !isWorldwideRemote && !hasSponsorship) {
+    redFlags.push("Vize sponsorluğu sunulmuyor veya belirtilmemiş (Yurtdışı pozisyon)");
+  }
+  if (hasNoSponsorship && !isTurkeyJob && !redFlags.some(r => r.includes("Vize sponsorluğu"))) {
     redFlags.push("Vize sponsorluğu sunulmuyor (No sponsorship)");
   }
   if (isRestrictedRemote && !isCountryLocked) {
@@ -533,6 +539,9 @@ export function runHeuristicAnalysis(job: JobPosting, profile: MasterProfile): J
   if (isCountryLocked) {
     finalVerdict = "SKIP";
     oneSentenceReason = `İlan uzaktan çalışma (remote) görünse de yalnızca ilgili ülkede yerel ikamet edenleri kabul ediyor (${lockedReason}); Türkiye'den başvuruya kapalıdır.`;
+  } else if (!isTurkeyJob && !isWorldwideRemote && !hasSponsorship) {
+    finalVerdict = "SKIP";
+    oneSentenceReason = "Yurtdışı pozisyon için vize sponsorluğu veya relokasyon desteği belirtilmemiştir; Türkiye'den çalışma izni/vize olmadan başvuru yapılamaz.";
   } else if (hasNoSponsorship && !isTurkeyJob && !isWorldwideRemote) {
     finalVerdict = "SKIP";
     oneSentenceReason = "Teknik gereksinimler uygun olsa da vize sponsorluğu verilmiyor ve yerel çalışma izni zorunlu tutuluyor.";
@@ -547,9 +556,7 @@ export function runHeuristicAnalysis(job: JobPosting, profile: MasterProfile): J
     oneSentenceReason = "Deneyim eksiklikleri veya lokasyon kısıtları nedeniyle başvuru öncelikli önerilmiyor.";
   } else {
     finalVerdict = "CONSIDER";
-    oneSentenceReason = canApplyFromTurkey === "unclear"
-      ? "Rol gereksinimleri profille örtüşüyor ancak Türkiye'den uzaktan çalışılabilirlik veya vize durumu ilanda net değil; teyit önerilir."
-      : "Profil ile uyumlu noktalar bulunuyor ancak çalışma şartları veya detayların teyit edilmesi tavsiye edilir.";
+    oneSentenceReason = "Profil ile uyumlu noktalar bulunuyor ancak çalışma şartları veya detayların teyit edilmesi tavsiye edilir.";
   }
 
   return {
