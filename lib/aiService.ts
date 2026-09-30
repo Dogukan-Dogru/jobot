@@ -358,11 +358,34 @@ export function runHeuristicAnalysis(job: JobPosting, profile: MasterProfile): J
     text.includes("must be based in canada") ||
     text.includes("remote within canada");
 
+  const isGermanyOnly =
+    effectiveCountry === "Germany" ||
+    locLower.includes("germany") ||
+    locLower.includes("deutschland") ||
+    text.includes("remote from: germany") ||
+    text.includes("remote within germany") ||
+    text.includes("must be based in germany") ||
+    text.includes("must reside in germany") ||
+    text.includes("based in germany");
+
+  const isSpecificForeignCountry = 
+    !isTurkeyJob && 
+    effectiveCountry !== "Worldwide Remote" && 
+    effectiveCountry !== "Global Remote" && 
+    effectiveCountry !== "Remote" && 
+    effectiveCountry !== "Europe";
+
+  const isLocationMarkedOnly = 
+    locLower.includes("only") || 
+    locLower.includes("remote - ");
+
   const isRestrictedRemote = 
     isUsOnly ||
     isUkOnly ||
     isCanadaOnly ||
-    locLower.includes("only") ||
+    isGermanyOnly ||
+    isSpecificForeignCountry ||
+    isLocationMarkedOnly ||
     text.includes("remote within us") || 
     text.includes("us only") || 
     text.includes("uk only") || 
@@ -406,6 +429,9 @@ export function runHeuristicAnalysis(job: JobPosting, profile: MasterProfile): J
     } else if (isCanadaOnly) {
       isCountryLocked = true;
       lockedReason = "Yalnızca Kanada (Canada) sınırları içinden uzaktan çalışma kabul ediliyor (Canada Only)";
+    } else if (isGermanyOnly || isSpecificForeignCountry || isLocationMarkedOnly) {
+      isCountryLocked = true;
+      lockedReason = `Yalnızca ${effectiveCountry} sınırları içinden uzaktan çalışma kabul ediliyor (${effectiveLocation})`;
     } else {
       for (const pat of countryLockPatterns) {
         const match = text.match(pat);
@@ -423,21 +449,23 @@ export function runHeuristicAnalysis(job: JobPosting, profile: MasterProfile): J
 
   // Worldwide Remote check: ONLY valid if not locked to a specific country
   const hasWorldwideInGeo = 
-    effectiveCountry.toLowerCase() === "worldwide remote" ||
-    locLower.includes("worldwide") ||
-    locLower.includes("global remote") ||
-    locLower.includes("anywhere remote");
+    !isCountryLocked &&
+    (effectiveCountry.toLowerCase() === "worldwide remote" ||
+    locLower === "worldwide remote" ||
+    locLower === "global remote");
 
   const hasWorldwideInText =
-    text.includes("work from anywhere") ||
-    text.includes("remote worldwide") ||
-    text.includes("remote - worldwide") ||
-    text.includes("worldwide remote") ||
-    text.includes("anywhere in the world") ||
-    text.includes("hire globally") ||
-    text.includes("hire anywhere") ||
-    /\bdeel\b/i.test(text) ||
-    /\b(eor|employer of record)\b/i.test(text);
+    !isCountryLocked &&
+    !isSpecificForeignCountry &&
+    (
+      text.includes("work from anywhere") ||
+      text.includes("remote worldwide") ||
+      text.includes("remote - worldwide") ||
+      text.includes("worldwide remote") ||
+      text.includes("anywhere in the world") ||
+      /\bdeel\b/i.test(text) ||
+      /\b(eor|employer of record)\b/i.test(text)
+    );
 
   const isWorldwideRemote = !isCountryLocked && (hasWorldwideInGeo || hasWorldwideInText);
 
