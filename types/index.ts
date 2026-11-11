@@ -84,6 +84,7 @@ export interface MasterProfile {
   yearsOfExperience: number;
   currentLocation: string; // e.g. "Türkiye (Istanbul)"
   targetCountries: string[];
+  targetCities?: string[];
   targetRoles: {
     primary: string[];
     secondary: string[];
@@ -100,12 +101,10 @@ export interface MasterProfile {
   }[];
   projectManagementHighlights: string[];
   productManagementHighlights: string[];
-  ecommerceExperience: {
-    company: string;
-    role: string;
-    period: string;
-    details: string[];
-  };
+  summary?: string;
+  skills?: string[];
+  workPreference?: 'remote' | 'hybrid' | 'onsite' | 'any';
+  needsVisaSponsorship?: boolean;
   languages: { language: string; level: string }[];
   rawMarkdown: string;
 }

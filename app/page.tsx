@@ -10,7 +10,7 @@ import {
   resetJobsToDefault, 
   getStoredProfile, 
   saveProfile, 
-  resetProfileToDefault, 
+  clearProfile,
   getStoredSettings, 
   saveSettings, 
   exportJobsToCsv,
@@ -22,6 +22,7 @@ import { Navbar } from "@/components/Navbar";
 import { KanbanBoard } from "@/components/KanbanBoard";
 import { TableView } from "@/components/TableView";
 import { ProfileView } from "@/components/ProfileView";
+import { OnboardingScreen } from "@/components/OnboardingScreen";
 import { AddJobModal } from "@/components/AddJobModal";
 import { JobDetailModal } from "@/components/JobDetailModal";
 import { SettingsModal } from "@/components/SettingsModal";
@@ -41,7 +42,7 @@ import {
 
 export default function Home() {
   const [jobs, setJobs] = useState<JobPosting[]>([]);
-  const [profile, setProfile] = useState<MasterProfile>(getStoredProfile());
+  const [profile, setProfile] = useState<MasterProfile | null>(null);
   const [settings, setSettings] = useState<AppSettings>(getStoredSettings());
 
   const [activeTab, setActiveTab] = useState<"kanban" | "table" | "profile">("kanban");
@@ -73,14 +74,12 @@ export default function Home() {
           } else if (localJobs.length === 0) {
             setJobs([]);
           }
-          if (dbData.profile) setProfile(dbData.profile);
           if (dbData.settings) setSettings(dbData.settings);
         } else if (localJobs.length > 0) {
           // If SQLite was empty but localStorage had data, migrate localStorage into SQLite
           syncDbAction({
             action: "migrateFromLocalStorage",
             jobs: localJobs,
-            profile: localProfile,
             settings: localSettings
           });
         }
@@ -123,6 +122,7 @@ export default function Home() {
     jobData: Omit<JobPosting, "id" | "dateAdded" | "status">,
     runAiImmediately: boolean
   ) => {
+    if (!profile) return;
     const newJob: JobPosting = {
       ...jobData,
       id: "job-" + Date.now(),
@@ -192,6 +192,7 @@ export default function Home() {
   };
 
   const handleReanalyze = async (id: string) => {
+    if (!profile) return;
     const target = jobs.find((j) => j.id === id);
     if (!target) return;
     const analysis = await analyzeJobWithAI(target, profile, settings);
@@ -204,6 +205,7 @@ export default function Home() {
   };
 
   const handleGeneratePackage = async (id: string) => {
+    if (!profile) return;
     const target = jobs.find((j) => j.id === id);
     if (!target) return;
     const pkg = await generatePackageWithAI(target, profile, settings);
@@ -229,11 +231,6 @@ export default function Home() {
     setProfile(newProfile);
   };
 
-  const handleResetProfile = () => {
-    const def = resetProfileToDefault();
-    setProfile(def);
-  };
-
   const handleSaveSettings = (newSettings: AppSettings) => {
     saveSettings(newSettings);
     setSettings(newSettings);
@@ -241,10 +238,11 @@ export default function Home() {
 
   const handleResetAllData = () => {
     const defJobs = resetJobsToDefault();
-    const defProf = resetProfileToDefault();
+    clearProfile();
     setJobs(defJobs);
-    setProfile(defProf);
+    setProfile(null);
     setSelectedJob(null);
+    setActiveTab("kanban");
   };
 
   // KPIs
@@ -254,6 +252,11 @@ export default function Home() {
   const appliedCount = jobs.filter((j) => j.status === "applied" || j.status === "interview" || j.status === "offer").length;
 
   if (!isMounted) return null;
+
+  // Profil yoksa uygulamaya girilemez: önce kayıt (onboarding) ekranı
+  if (!profile) {
+    return <OnboardingScreen onComplete={handleSaveProfile} />;
+  }
 
   return (
     <div className="min-h-screen bg-slate-50 dark:bg-slate-950 flex flex-col font-sans text-slate-900 dark:text-slate-100 selection:bg-indigo-100 dark:selection:bg-indigo-900/60 selection:text-indigo-900 dark:selection:text-indigo-200 transition-colors">
@@ -345,7 +348,7 @@ export default function Home() {
                   İş Arama & Başvuru Boru Hattı (Pipeline)
                 </h2>
                 <p className="text-xs text-slate-500 dark:text-slate-400">
-                  Kartları sürükleyip bırakarak aşamaları değiştirebilir veya tıklayarak detaylı AI analizini inceleyebilirsiniz.
+                  Kartları sürükleyip bırakarak aşamaları değiştirebilir veya tıklayarak detaylı analizi inceleyebilirsiniz.
                 </p>
               </div>
               <div className="flex items-center gap-2">
@@ -381,7 +384,7 @@ export default function Home() {
                 Detaylı İlan Listesi & Filtreleme
               </h2>
               <p className="text-xs text-slate-500">
-                Arama yapın, AI kararına göre filtreleyin veya tüm kayıtları Excel / Google Sheets için dışa aktarın.
+                Arama yapın, karara göre filtreleyin veya tüm kayıtları Excel / Google Sheets için dışa aktarın.
               </p>
             </div>
 
@@ -398,7 +401,7 @@ export default function Home() {
           <ProfileView
             profile={profile}
             onSaveProfile={handleSaveProfile}
-            onResetDefault={handleResetProfile}
+            onDeleteAllData={handleResetAllData}
           />
         )}
 
@@ -408,7 +411,7 @@ export default function Home() {
       <footer className="w-full border-t border-slate-200 bg-white py-4 mt-auto">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex flex-col sm:flex-row items-center justify-between gap-2 text-xs text-slate-500">
           <div className="flex items-center gap-2">
-            <span className="font-bold text-slate-700">JoBot AI</span>
+            <span className="font-bold text-slate-700">JoBot</span>
             <span>•</span>
             <span>Windows, Mac, iOS ve Android uyumlu • Sıfır Kurulum</span>
           </div>

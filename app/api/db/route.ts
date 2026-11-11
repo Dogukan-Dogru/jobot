@@ -5,13 +5,10 @@ import {
   dbSaveJob, 
   dbSaveJobs, 
   dbDeleteJob, 
-  dbGetProfile, 
-  dbSaveProfile, 
   dbGetSettings, 
   dbSaveSettings 
 } from "@/lib/db";
-import { JobPosting, MasterProfile, AppSettings } from "@/types";
-import { defaultMasterProfile } from "@/data/defaultProfile";
+import { JobPosting, AppSettings } from "@/types";
 
 export async function GET() {
   try {
@@ -19,7 +16,6 @@ export async function GET() {
     return NextResponse.json({
       success: true,
       jobs: data.jobs,
-      profile: data.profile,
       settings: data.settings
     });
   } catch (err: unknown) {
@@ -27,7 +23,6 @@ export async function GET() {
     return NextResponse.json({
       success: true,
       jobs: [],
-      profile: defaultMasterProfile,
       settings: {
         aiProvider: "demo",
         apiKey: "",
@@ -73,15 +68,6 @@ export async function POST(req: NextRequest) {
         return NextResponse.json({ success: true });
       }
 
-      case "saveProfile": {
-        const profile = body.profile as MasterProfile;
-        if (!profile) {
-          return NextResponse.json({ error: "Missing profile" }, { status: 400 });
-        }
-        dbSaveProfile(profile);
-        return NextResponse.json({ success: true });
-      }
-
       case "saveSettings": {
         const settings = body.settings as AppSettings;
         if (!settings) {
@@ -92,14 +78,11 @@ export async function POST(req: NextRequest) {
       }
 
       case "migrateFromLocalStorage": {
-        // If the browser already has customized jobs/profile, persist them all into DB
-        const { jobs, profile, settings } = body;
+        // If the browser already has customized jobs, persist them all into DB
+        const { jobs, settings } = body;
         if (Array.isArray(jobs) && jobs.length > 0) {
           const cleanJobs = jobs.filter((j: JobPosting) => j && j.id && !j.id.startsWith("sample-job-"));
           dbSaveJobs(cleanJobs);
-        }
-        if (profile) {
-          dbSaveProfile(profile);
         }
         if (settings) {
           dbSaveSettings(settings);

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { JobPosting, MasterProfile, AppSettings } from "@/types";
 import { runHeuristicAnalysis, parseGeoLocation, detectWorkModel } from "@/lib/aiService";
 import crypto from "crypto";
+import { buildSearchPlan, buildSourceQueries, isValidTargetRole as planAccepts, SearchPlan } from "@/lib/searchPlan";
 
 // Helper to strip HTML tags
 function stripHtml(html: string): string {
@@ -17,55 +18,6 @@ function stripHtml(html: string): string {
     .trim();
 }
 
-// Strict Whitelist & Blacklist filter for PM and Project Manager roles
-function isValidTargetRole(title: string, roleScope: string[] = ["product", "project"]): boolean {
-  const t = title.toLowerCase().trim();
-
-  // 1. Strict Blacklist (Negative keywords - reject immediately)
-  const blacklist = [
-    "software engineer", "software developer", "frontend", "backend", "fullstack",
-    "full stack", "devops", "sre", "qa engineer", "test engineer", "architect",
-    "product designer", "ui/ux", "ux designer", "ui designer", "graphic designer",
-    "account manager", "account executive", "sales manager", "sales executive",
-    "business development", "customer success", "customer support", "recruiter",
-    "hr manager", "talent acquisition", "general manager assistant", "medikal",
-    "medical", "export", "pharmaceutical", "data engineer", "data scientist",
-    "financial analyst", "product marketing manager", "pmm", "asistan", "assistant",
-    "relations specialist", "specialist (spanish", "satış", "pazarlama uzmanı"
-  ];
-
-  for (const neg of blacklist) {
-    if (t.includes(neg)) {
-      return false;
-    }
-  }
-
-  // 2. Whitelist for Product Manager roles
-  const productRoles = [
-    "product manager", "product owner", "technical product",
-    "product lead", "head of product", "vp of product", "product operations",
-    "ürün yöneticisi", "ürün müdürü", "associate product manager", 
-    "senior product manager", "lead product manager", "junior product manager",
-    "apm", "group product manager"
-  ];
-
-  // 3. Whitelist for Project Manager roles
-  const projectRoles = [
-    "project manager", "technical project", "delivery manager", "program manager",
-    "scrum master", "proje yöneticisi", "proje müdürü", "proje lideri",
-    "it project manager", "agile project manager", "senior project manager",
-    "technical delivery manager", "project lead", "tpm"
-  ];
-
-  const matchProduct = productRoles.some(pos => t.includes(pos));
-  const matchProject = projectRoles.some(pos => t.includes(pos));
-
-  if (roleScope.includes("product") && matchProduct) return true;
-  if (roleScope.includes("project") && matchProject) return true;
-
-  return false;
-}
-
 const BROWSER_HEADERS = {
   "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
   "Accept-Language": "tr-TR,tr;q=0.9,en-US;q=0.8,en;q=0.7",
@@ -78,14 +30,23 @@ export async function POST(req: NextRequest) {
       profile, 
       existingUrls = [],
       sources = ["linkedin", "kariyer", "remoteok", "europe"],
-      roleScope = ["product", "project"]
+      roleIds
     }: { 
       profile: MasterProfile; 
       settings?: AppSettings; 
       existingUrls: string[];
       sources?: string[];
-      roleScope?: string[];
+      roleIds?: string[];
     } = await req.json();
+
+    if (!profile) {
+      return NextResponse.json({ error: "Profil gerekli" }, { status: 400 });
+    }
+
+    // Arama tamamen profilden üretilir (roller, ülkeler, kaynak sorguları, başlık filtresi)
+    const plan: SearchPlan = buildSearchPlan(profile);
+    const queries = buildSourceQueries(plan, roleIds);
+    const isValidTargetRole = (title: string) => planAccepts(title, plan, roleIds);
 
     const fetchedJobs: JobPosting[] = [];
     const seenUrls = new Set(existingUrls.map(u => (u || "").toLowerCase().trim()).filter(Boolean));
@@ -97,22 +58,10 @@ export async function POST(req: NextRequest) {
     // -------------------------------------------------------------
     if (sources.includes("linkedin")) {
       const fetchLinkedIn = async () => {
-        const liUrls: string[] = [];
-
-        if (roleScope.includes("product")) {
-          liUrls.push(
-            "https://www.linkedin.com/jobs-guest/jobs/api/seeMoreJobPostings/search?keywords=Product%20Manager&location=Turkey&start=0",
-            "https://www.linkedin.com/jobs-guest/jobs/api/seeMoreJobPostings/search?keywords=Product%20Manager&location=Worldwide&f_WT=2&start=0"
-          );
-        }
-
-        if (roleScope.includes("project")) {
-          liUrls.push(
-            "https://www.linkedin.com/jobs-guest/jobs/api/seeMoreJobPostings/search?keywords=Project%20Manager&location=Turkey&start=0",
-            "https://www.linkedin.com/jobs-guest/jobs/api/seeMoreJobPostings/search?keywords=Technical%20Project%20Manager&location=Worldwide&f_WT=2&start=0",
-            "https://www.linkedin.com/jobs-guest/jobs/api/seeMoreJobPostings/search?keywords=Project%20Manager&location=Worldwide&f_WT=2&start=0"
-          );
-        }
+        const liUrls = queries.linkedin.map((q) => {
+          const base = `https://www.linkedin.com/jobs-guest/jobs/api/seeMoreJobPostings/search?keywords=${encodeURIComponent(q.keywords)}&location=${encodeURIComponent(q.location)}`;
+          return q.remote ? `${base}&f_WT=2&start=0` : `${base}&start=0`;
+        });
 
         const subFetches = liUrls.map(async (liUrl) => {
           try {
@@ -136,7 +85,7 @@ export async function POST(req: NextRequest) {
 
             for (let i = 0; i < titles.length; i++) {
               const title = titles[i];
-              if (!isValidTargetRole(title, roleScope)) continue; // STRICT FILTER
+              if (!isValidTargetRole(title)) continue; // STRICT FILTER
 
               const url = links[i] || "";
               const urlKey = url.toLowerCase().trim();
@@ -144,7 +93,7 @@ export async function POST(req: NextRequest) {
               if (urlKey) seenUrls.add(urlKey);
 
               const company = companies[i] || "LinkedIn Company";
-              const rawLoc = locations[i] || "Turkey / Remote";
+              const rawLoc = locations[i] || "Remote";
               const { location, country } = parseGeoLocation(rawLoc);
 
               const newJob: JobPosting = {
@@ -179,17 +128,11 @@ export async function POST(req: NextRequest) {
     }
 
     // -------------------------------------------------------------
-    // SOURCE 2: Kariyer.net Live Search (Product & Proje Yöneticisi)
+    // SOURCE 2: Kariyer.net Live Search (yalnızca Türkiye hedefliyorsa)
     // -------------------------------------------------------------
-    if (sources.includes("kariyer")) {
+    if (sources.includes("kariyer") && queries.kariyer.length > 0) {
       const fetchKariyer = async () => {
-        const kariyerUrls: string[] = [];
-        if (roleScope.includes("product")) {
-          kariyerUrls.push("https://www.kariyer.net/is-ilanlari?kw=product%20manager");
-        }
-        if (roleScope.includes("project")) {
-          kariyerUrls.push("https://www.kariyer.net/is-ilanlari?kw=proje%20yoneticisi");
-        }
+        const kariyerUrls = queries.kariyer.map((kw) => `https://www.kariyer.net/is-ilanlari?kw=${encodeURIComponent(kw)}`);
 
         const subFetches = kariyerUrls.map(async (kariyerUrl) => {
           try {
@@ -208,7 +151,7 @@ export async function POST(req: NextRequest) {
               const rawUrl = "https://www.kariyer.net" + m[1];
               const title = stripHtml(m[2]);
 
-              if (!isValidTargetRole(title, roleScope)) continue;
+              if (!isValidTargetRole(title)) continue;
               const urlKey = rawUrl.toLowerCase().trim();
               if (seenUrls.has(urlKey)) continue;
               seenUrls.add(urlKey);
@@ -269,7 +212,7 @@ export async function POST(req: NextRequest) {
 
           for (const item of items) {
             const title = item.position || "";
-            if (!isValidTargetRole(title, roleScope)) continue;
+            if (!isValidTargetRole(title)) continue;
 
             const url = item.url || (item.id ? `https://remoteok.com/remote-jobs/${item.id}` : "");
             const urlKey = url.toLowerCase().trim();
@@ -319,9 +262,7 @@ export async function POST(req: NextRequest) {
         const subFetches: Promise<void>[] = [];
 
         // Jobicy queries
-        const jobicyTags: string[] = [];
-        if (roleScope.includes("product")) jobicyTags.push("product");
-        if (roleScope.includes("project")) jobicyTags.push("project-management");
+        const jobicyTags = queries.jobicyTags;
 
         for (const tag of jobicyTags) {
           subFetches.push((async () => {
@@ -336,7 +277,7 @@ export async function POST(req: NextRequest) {
 
               for (const item of jobs) {
                 const title = item.jobTitle || "";
-                if (!isValidTargetRole(title, roleScope)) continue;
+                if (!isValidTargetRole(title)) continue;
 
                 const url = item.url || "";
                 const urlKey = url.toLowerCase().trim();
@@ -373,14 +314,15 @@ export async function POST(req: NextRequest) {
         }
 
         // Remotive queries
-        const remotiveCats: string[] = [];
-        if (roleScope.includes("product")) remotiveCats.push("product");
-        if (roleScope.includes("project")) remotiveCats.push("project-management");
+        const remotiveUrls = [
+          ...queries.remotiveCategories.map((c) => ({ key: c, url: `https://remotive.com/api/remote-jobs?category=${encodeURIComponent(c)}` })),
+          ...queries.remotiveSearches.map((q) => ({ key: q, url: `https://remotive.com/api/remote-jobs?search=${encodeURIComponent(q)}` }))
+        ];
 
-        for (const cat of remotiveCats) {
+        for (const { key: cat, url: remotiveUrl } of remotiveUrls) {
           subFetches.push((async () => {
             try {
-              const res = await fetch(`https://remotive.com/api/remote-jobs?category=${cat}`, {
+              const res = await fetch(remotiveUrl, {
                 headers: BROWSER_HEADERS,
                 signal: AbortSignal.timeout(5000)
               });
@@ -390,7 +332,7 @@ export async function POST(req: NextRequest) {
 
               for (const item of jobs) {
                 const title = item.title || "";
-                if (!isValidTargetRole(title, roleScope)) continue;
+                if (!isValidTargetRole(title)) continue;
 
                 const url = item.url || "";
                 const urlKey = url.toLowerCase().trim();

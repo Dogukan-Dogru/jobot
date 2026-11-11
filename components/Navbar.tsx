@@ -1,9 +1,9 @@
 "use client";
 
+import Image from "next/image";
 import React from "react";
 import { MasterProfile } from "@/types";
 import { 
-  Sparkles, 
   Plus, 
   Download, 
   Settings as SettingsIcon, 
@@ -47,8 +47,8 @@ export const Navbar: React.FC<NavbarProps> = ({
           
           {/* Logo & Brand */}
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-linear-to-tr from-blue-600 via-indigo-600 to-violet-600 flex items-center justify-center text-white shadow-md shadow-indigo-500/20">
-              <Sparkles className="w-5 h-5 animate-pulse" />
+            <div className="w-10 h-10 rounded-xl bg-white border border-slate-200 dark:border-slate-700 flex items-center justify-center shadow-xs overflow-hidden">
+              <Image src="/logo.png" alt="JoBot logosu" width={362} height={512} priority className="h-8 w-auto" />
             </div>
             <div>
               <div className="flex items-center gap-2">
@@ -56,11 +56,11 @@ export const Navbar: React.FC<NavbarProps> = ({
                   Jo<span className="text-indigo-600 dark:text-indigo-400">Bot</span>
                 </span>
                 <span className="text-[10px] uppercase tracking-wider font-semibold px-2 py-0.5 rounded-full bg-emerald-50 dark:bg-emerald-950/50 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800">
-                  SQLite • Web
+                  Verileriniz Tarayıcıda
                 </span>
               </div>
               <p className="text-xs text-slate-500 dark:text-slate-400 hidden sm:block">
-                AI Destekli İş Arama & Kariyer Asistanı
+                İş Arama & Kariyer Asistanı
               </p>
             </div>
           </div>
@@ -148,7 +148,7 @@ export const Navbar: React.FC<NavbarProps> = ({
             <button
               onClick={onOpenSettings}
               className="p-2 text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white bg-slate-50 dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 border border-slate-200 dark:border-slate-700 rounded-xl transition-colors cursor-pointer"
-              title="Uygulama ve Yapay Zeka Ayarları"
+              title="Uygulama Ayarları"
             >
               <SettingsIcon className="w-4 h-4" />
             </button>

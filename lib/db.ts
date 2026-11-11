@@ -2,8 +2,7 @@ import Database from "better-sqlite3";
 import path from "path";
 import fs from "fs";
 import os from "os";
-import { JobPosting, MasterProfile, AppSettings } from "@/types";
-import { defaultMasterProfile } from "@/data/defaultProfile";
+import { JobPosting, AppSettings } from "@/types";
 
 let dbInstance: Database.Database | null = null;
 let useMemoryFallback = false;
@@ -11,11 +10,9 @@ let useMemoryFallback = false;
 // Fallback in-memory store if SQLite cannot be opened (e.g. strict read-only serverless environments)
 const memoryStore: {
   jobs: JobPosting[];
-  profile: MasterProfile;
   settings: AppSettings;
 } = {
   jobs: [],
-  profile: defaultMasterProfile,
   settings: {
     aiProvider: "demo",
     apiKey: "",
@@ -89,6 +86,13 @@ export function getDatabase(): Database.Database | null {
         updated_at INTEGER NOT NULL
       );
     `);
+
+    // Profil artık sunucuda tutulmaz: eski kayıtlı profil verisini temizle
+    try {
+      db.prepare("DELETE FROM kv_store WHERE key = 'master_profile'").run();
+    } catch {
+      // ignore
+    }
 
     // Purge any legacy sample jobs from database
     try {
@@ -221,38 +225,8 @@ export function dbDeleteJob(id: string): void {
 }
 
 // -------------------------------------------------------------
-// PROFILE & SETTINGS REPOSITORY
+// SETTINGS REPOSITORY (profil sunucuda TUTULMAZ)
 // -------------------------------------------------------------
-export function dbGetProfile(): MasterProfile | null {
-  const db = getDatabase();
-  if (!db) return memoryStore.profile;
-  try {
-    const row = db.prepare("SELECT value_json FROM kv_store WHERE key = ?").get("master_profile") as { value_json: string } | undefined;
-    if (!row) return memoryStore.profile;
-    return JSON.parse(row.value_json) as MasterProfile;
-  } catch (err) {
-    console.warn("dbGetProfile error:", err);
-    return memoryStore.profile;
-  }
-}
-
-export function dbSaveProfile(profile: MasterProfile): void {
-  memoryStore.profile = profile;
-  const db = getDatabase();
-  if (!db) return;
-  try {
-    db.prepare(`
-      INSERT INTO kv_store (key, value_json, updated_at)
-      VALUES (?, ?, ?)
-      ON CONFLICT(key) DO UPDATE SET
-        value_json = excluded.value_json,
-        updated_at = excluded.updated_at
-    `).run("master_profile", JSON.stringify(profile), Date.now());
-  } catch (err) {
-    console.warn("dbSaveProfile error:", err);
-  }
-}
-
 export function dbGetSettings(): AppSettings | null {
   const db = getDatabase();
   if (!db) return memoryStore.settings;
@@ -288,18 +262,11 @@ export function dbSaveSettings(settings: AppSettings): void {
 // -------------------------------------------------------------
 export function dbEnsureInitialData(): {
   jobs: JobPosting[];
-  profile: MasterProfile;
   settings: AppSettings;
 } {
   try {
-    let jobs = dbGetJobs().filter(j => j && j.id && !j.id.startsWith("sample-job-"));
-    let profile = dbGetProfile();
+    const jobs = dbGetJobs().filter(j => j && j.id && !j.id.startsWith("sample-job-"));
     let settings = dbGetSettings();
-
-    if (!profile) {
-      dbSaveProfile(defaultMasterProfile);
-      profile = defaultMasterProfile;
-    }
 
     if (!settings) {
       const defSettings: AppSettings = {
@@ -313,13 +280,12 @@ export function dbEnsureInitialData(): {
       settings = defSettings;
     }
 
-    return { jobs, profile, settings };
+    return { jobs, settings };
   } catch (err) {
     console.warn("dbEnsureInitialData fallback triggered:", err);
     return {
       jobs: [],
-      profile: defaultMasterProfile,
-      settings: {
+          settings: {
         aiProvider: "demo",
         apiKey: "",
         modelName: "gemini-2.0-flash",

@@ -1,6 +1,7 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useMemo, useState } from "react";
+import { buildSearchPlan, defaultSelectedRoleIds, describePlanScope } from "@/lib/searchPlan";
 import { JobPosting, MasterProfile, AppSettings } from "@/types";
 import { 
   X, 
@@ -41,53 +42,49 @@ export const LiveScannerModal: React.FC<LiveScannerModalProps> = ({
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [hasScanned, setHasScanned] = useState(false);
 
-  // Role Scope: Product Manager, Project Manager, or Both!
-  const [roleScope, setRoleScope] = useState<string[]>(["product", "project"]);
+  // Arama planı tamamen profilden üretilir (roller, ülkeler, kaynaklar)
+  const plan = useMemo(() => buildSearchPlan(profile), [profile]);
+  const [roleOverrides, setRoleOverrides] = useState<Record<string, boolean>>({});
+  const defaultIds = useMemo(() => defaultSelectedRoleIds(plan), [plan]);
+  const selectedRoleIds = plan.roles
+    .filter((r) => (r.id in roleOverrides ? roleOverrides[r.id] : defaultIds.includes(r.id)))
+    .map((r) => r.id);
 
   // Network selection toggles
-  const [selectedSources, setSelectedSources] = useState<string[]>([
-    "linkedin",
-    "kariyer",
-    "remoteok",
-    "europe"
-  ]);
+  const [sourceOverrides, setSourceOverrides] = useState<Record<string, boolean>>({});
+  const allSources = ["linkedin", "kariyer", "remoteok", "europe"].filter((s) => s !== "kariyer" || plan.turkeyRelevant);
+  const selectedSources = allSources.filter((s) => (s in sourceOverrides ? sourceOverrides[s] : true));
 
   // Hide country-locked / SKIP jobs by default
   const [hideSkipped, setHideSkipped] = useState(true);
 
   if (!isOpen) return null;
 
-  const toggleRole = (role: string) => {
-    if (roleScope.includes(role)) {
-      if (roleScope.length === 1) return; // Keep at least one role
-      setRoleScope(roleScope.filter(r => r !== role));
-    } else {
-      setRoleScope([...roleScope, role]);
-    }
+  const toggleRole = (id: string) => {
+    const isOn = selectedRoleIds.includes(id);
+    if (isOn && selectedRoleIds.length === 1) return; // en az bir rol kalsın
+    setRoleOverrides({ ...roleOverrides, [id]: !isOn });
   };
 
   const toggleSource = (source: string) => {
-    if (selectedSources.includes(source)) {
-      if (selectedSources.length === 1) return; // keep at least one
-      setSelectedSources(selectedSources.filter(s => s !== source));
-    } else {
-      setSelectedSources([...selectedSources, source]);
-    }
+    const isOn = selectedSources.includes(source);
+    if (isOn && selectedSources.length === 1) return; // en az bir kaynak kalsın
+    setSourceOverrides({ ...sourceOverrides, [source]: !isOn });
   };
 
   const handleStartScan = async () => {
     setIsScanning(true);
-    setScanStatusMessage("LinkedIn, Kariyer.net ve küresel ağlara bağlanılıyor...");
+    setScanStatusMessage("Seçili ilan ağlarına bağlanılıyor...");
     setDiscoveredJobs([]);
     setSelectedIds(new Set());
 
     try {
       setTimeout(() => {
-        setScanStatusMessage("Product Manager & Project Manager ilanları toplanıyor; alakasız roller filtreleniyor...");
+        setScanStatusMessage(`${describePlanScope(plan, selectedRoleIds)} ilanları toplanıyor; alakasız roller filtreleniyor...`);
       }, 1200);
 
       setTimeout(() => {
-        setScanStatusMessage("10 adımlı AI motoru Türkiye uygunluğu ve fintech/teslimat deneyimine göre eliyor...");
+        setScanStatusMessage("İlanlar profilinize, konumunuza ve çalışma izni durumunuza göre değerlendiriliyor...");
       }, 2500);
 
       const res = await fetch("/api/scan-jobs", {
@@ -98,7 +95,7 @@ export const LiveScannerModal: React.FC<LiveScannerModalProps> = ({
           settings,
           existingUrls,
           sources: selectedSources,
-          roleScope
+          roleIds: selectedRoleIds
         })
       });
 
@@ -166,14 +163,14 @@ export const LiveScannerModal: React.FC<LiveScannerModalProps> = ({
             <div>
               <div className="flex items-center gap-2">
                 <h2 className="text-base font-bold text-slate-900 dark:text-white">
-                  Canlı İlanları Tara (PM & Project Manager)
+                  Canlı İlanları Tara
                 </h2>
                 <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-100 dark:bg-emerald-950/60 text-emerald-800 dark:text-emerald-300">
-                  PM & PjM Özel Filtresi
+                  Profilinize Özel
                 </span>
               </div>
               <p className="text-xs text-slate-500 dark:text-slate-400">
-                LinkedIn, Kariyer.net, RemoteOK ve küresel ağlardan Product & Project Manager ilanlarını tara.
+                Profilinizdeki hedef roller ve ülkelere göre ilan ağlarını tarar.
               </p>
             </div>
           </div>
@@ -193,32 +190,26 @@ export const LiveScannerModal: React.FC<LiveScannerModalProps> = ({
           <div className="flex flex-wrap items-center gap-2 pb-1 border-b border-slate-100 dark:border-slate-800">
             <span className="text-xs font-bold text-slate-700 dark:text-slate-300 mr-1 flex items-center gap-1">
               <Briefcase className="w-3.5 h-3.5 text-indigo-600 dark:text-indigo-400" />
-              Hedef Rol Odak:
+              Aranacak Roller (profilinizden):
             </span>
 
-            <button
-              type="button"
-              onClick={() => toggleRole("product")}
-              className={`px-3 py-1 rounded-lg text-xs font-bold transition-all border cursor-pointer ${
-                roleScope.includes("product")
-                  ? "bg-indigo-600 text-white border-indigo-600 shadow-xs"
-                  : "bg-slate-50 dark:bg-slate-800 text-slate-400 border-slate-200 dark:border-slate-700"
-              }`}
-            >
-              ✓ Product Manager (Ürün Yöneticisi)
-            </button>
-
-            <button
-              type="button"
-              onClick={() => toggleRole("project")}
-              className={`px-3 py-1 rounded-lg text-xs font-bold transition-all border cursor-pointer ${
-                roleScope.includes("project")
-                  ? "bg-indigo-600 text-white border-indigo-600 shadow-xs"
-                  : "bg-slate-50 dark:bg-slate-800 text-slate-400 border-slate-200 dark:border-slate-700"
-              }`}
-            >
-              ✓ Project Manager (Proje Yöneticisi & Delivery)
-            </button>
+            {plan.roles.map((r) => {
+              const on = selectedRoleIds.includes(r.id);
+              return (
+                <button
+                  key={r.id}
+                  type="button"
+                  onClick={() => toggleRole(r.id)}
+                  className={`px-3 py-1 rounded-lg text-xs font-bold transition-all border cursor-pointer ${
+                    on
+                      ? "bg-indigo-600 text-white border-indigo-600 shadow-xs"
+                      : "bg-slate-50 dark:bg-slate-800 text-slate-400 border-slate-200 dark:border-slate-700"
+                  }`}
+                >
+                  {on ? "✓ " : ""}{r.query}
+                </button>
+              );
+            })}
           </div>
 
           {/* Network Source toggles */}
@@ -237,9 +228,10 @@ export const LiveScannerModal: React.FC<LiveScannerModalProps> = ({
                   : "bg-slate-50 dark:bg-slate-800 text-slate-400 border-slate-200 dark:border-slate-700"
               }`}
             >
-              🔵 LinkedIn (TR & Global)
+              🔵 LinkedIn
             </button>
 
+            {plan.turkeyRelevant && (
             <button
               type="button"
               onClick={() => toggleSource("kariyer")}
@@ -251,6 +243,7 @@ export const LiveScannerModal: React.FC<LiveScannerModalProps> = ({
             >
               🟣 Kariyer.net (Türkiye)
             </button>
+            )}
 
             <button
               type="button"
@@ -273,7 +266,7 @@ export const LiveScannerModal: React.FC<LiveScannerModalProps> = ({
                   : "bg-slate-50 dark:bg-slate-800 text-slate-400 border-slate-200 dark:border-slate-700"
               }`}
             >
-              🟠 Avrupa & Global Remote (Jobicy & Remotive)
+              🟠 Global Remote (Jobicy & Remotive)
             </button>
           </div>
 
@@ -281,7 +274,8 @@ export const LiveScannerModal: React.FC<LiveScannerModalProps> = ({
             <div className="text-xs text-slate-600 dark:text-slate-400 flex items-center gap-1.5">
               <ShieldCheck className="w-4 h-4 text-emerald-600 dark:text-emerald-400 shrink-0" />
               <span>
-                <strong>Sıkı Filtreleme:</strong> Software Engineer, Designer ve Account Manager rolleri otomatik elenir.
+                <strong>Sıkı Filtreleme:</strong> Yalnızca seçtiğiniz rollere uyan başlıklar alınır; hedeflemediğiniz alanların rolleri elenir.
+                {plan.locations.length > 0 && <> Aranan konumlar: {plan.locations.slice(0, 2).join(", ")}{plan.wantsRemote ? " + uzaktan" : ""}.</>}
               </span>
             </div>
 
@@ -375,7 +369,7 @@ export const LiveScannerModal: React.FC<LiveScannerModalProps> = ({
                 Canlı İlan Aramasını Başlatın
               </h3>
               <p className="text-xs text-slate-500 dark:text-slate-400 max-w-sm mx-auto">
-                LinkedIn, Kariyer.net, RemoteOK ve küresel ağlardan hem <strong>Product Manager</strong> hem <strong>Project Manager</strong> ilanları taranır; Türkiye çalışma kısıtları ve sahte remote&apos;lar elenir.
+                Seçtiğiniz roller (<strong>{describePlanScope(plan, selectedRoleIds)}</strong>) için ilan ağları taranır; konum/çalışma izni kısıtları ve sahte remote&apos;lar elenir.
               </p>
             </div>
           )}
@@ -467,7 +461,7 @@ export const LiveScannerModal: React.FC<LiveScannerModalProps> = ({
                     </span>
                     <span>•</span>
                     <span className="text-[11px] text-slate-500 dark:text-slate-400 font-semibold">
-                      🇹🇷 TR: {canTR === true ? "Uygun (Açık)" : canTR === false ? "Kısıtlı" : "Teyit Gerekir"}
+                      📍 {plan.homeCountry || "Konumunuz"}: {canTR === true ? "Uygun (Açık)" : canTR === false ? "Kısıtlı" : "Teyit Gerekir"}
                     </span>
                   </div>
 

@@ -1,5 +1,4 @@
 import { AppSettings, JobPosting, MasterProfile } from "@/types";
-import { defaultMasterProfile } from "@/data/defaultProfile";
 
 const STORAGE_KEYS = {
   JOBS: "jobot_saved_jobs_v1",
@@ -73,7 +72,6 @@ export async function syncDbAction(body: Record<string, unknown>): Promise<void>
 
 export async function fetchDbInitialData(): Promise<{
   jobs?: JobPosting[];
-  profile?: MasterProfile;
   settings?: AppSettings;
 } | null> {
   if (!isBrowser) return null;
@@ -132,18 +130,20 @@ export function resetJobsToDefault(): JobPosting[] {
   return [];
 }
 
-export function getStoredProfile(): MasterProfile {
-  if (!isBrowser) return defaultMasterProfile;
+// Profil YALNIZCA tarayıcıda saklanır; sunucuya/SQLite'a asla yazılmaz.
+export function getStoredProfile(): MasterProfile | null {
+  if (!isBrowser) return null;
   try {
     const raw = localStorage.getItem(STORAGE_KEYS.PROFILE);
-    if (!raw) {
-      localStorage.setItem(STORAGE_KEYS.PROFILE, JSON.stringify(defaultMasterProfile));
-      return defaultMasterProfile;
-    }
-    return JSON.parse(raw);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    if (!parsed || typeof parsed !== "object" || !parsed.name) return null;
+    // Eski geliştirici varsayılan profili artık geçerli sayılmaz; kullanıcı kayıt ekranından kendi profilini oluşturur
+    if (parsed.id === "default-mine-pm-pjm") return null;
+    return parsed as MasterProfile;
   } catch (error) {
     console.error("Error reading profile from localStorage:", error);
-    return defaultMasterProfile;
+    return null;
   }
 }
 
@@ -154,16 +154,15 @@ export function saveProfile(profile: MasterProfile): void {
   } catch (error) {
     console.error("Error saving profile to localStorage:", error);
   }
-  // Sync to SQLite
-  syncDbAction({ action: "saveProfile", profile });
 }
 
-export function resetProfileToDefault(): MasterProfile {
-  if (isBrowser) {
-    localStorage.setItem(STORAGE_KEYS.PROFILE, JSON.stringify(defaultMasterProfile));
+export function clearProfile(): void {
+  if (!isBrowser) return;
+  try {
+    localStorage.removeItem(STORAGE_KEYS.PROFILE);
+  } catch (error) {
+    console.error("Error clearing profile:", error);
   }
-  syncDbAction({ action: "saveProfile", profile: defaultMasterProfile });
-  return defaultMasterProfile;
 }
 
 export function getStoredSettings(): AppSettings {
@@ -173,7 +172,8 @@ export function getStoredSettings(): AppSettings {
     if (!raw) {
       return defaultSettings;
     }
-    return { ...defaultSettings, ...JSON.parse(raw) };
+    // Harici AI sağlayıcısı kaldırıldı: eski kayıtlı sağlayıcı/anahtar yok sayılır
+    return { ...defaultSettings, ...JSON.parse(raw), aiProvider: "demo", apiKey: "" };
   } catch (error) {
     console.error("Error reading settings from localStorage:", error);
     return defaultSettings;
@@ -206,7 +206,7 @@ export function exportJobsToCsv(jobs: JobPosting[]): void {
     "Maaş",
     "Kaynak",
     "Durum",
-    "AI Kararı",
+    "Karar",
     "Türkiye Uygunluğu",
     "Vize Sponsorluğu",
     "Karar Gerekçesi",

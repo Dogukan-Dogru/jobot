@@ -13,11 +13,8 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "JoBot — AI İş Arama & Kariyer Asistanı",
-  description: "Kurulum gerektirmeyen web tabanlı kariyer copilot'u. İlanları 10 adımlı filtreyle analiz eder, Türkiye & vize uygunluğunu denetler, ilana özel CV, ön yazı ve LinkedIn mesajı üretir.",
-  icons: {
-    icon: "/favicon.ico",
-  },
+  title: "JoBot — İş Arama & Kariyer Asistanı",
+  description: "Kurulum gerektirmeyen web tabanlı kariyer asistanı. Profilinize göre ilanları tarar, konum ve çalışma izni uygunluğunu denetler, ilana özel CV maddeleri, ön yazı ve LinkedIn mesajı hazırlar. Verileriniz tarayıcınızda kalır.",
   appleWebApp: {
     capable: true,
     statusBarStyle: "default",

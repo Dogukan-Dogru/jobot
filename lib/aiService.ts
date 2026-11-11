@@ -1,27 +1,31 @@
 import { AppSettings, ApplicationPackage, JobAnalysis, JobPosting, MasterProfile } from "@/types";
+import { buildSearchPlan, homeCountryOf, isValidTargetRole as planAccepts } from "@/lib/searchPlan";
+import { SKILL_DICTIONARY } from "@/lib/cvParser";
+import { countryMatchesTargets, detectCountry } from "@/lib/geo";
 
 // The master prompt matching the ChatGPT specifications
 export function buildAnalysisSystemPrompt(profile: MasterProfile): string {
   return `You are JoBot, an elite career intelligence analyst for candidate: ${profile.name}.
-Target Title: ${profile.targetTitle} (4+ years in Fintech, SoftPOS, Payments, B2B dashboards, e-commerce).
+Target Title: ${profile.targetTitle} (${profile.yearsOfExperience}+ years of experience${profile.skills && profile.skills.length ? "; key skills: " + profile.skills.slice(0, 12).join(", ") : ""}).
 Current Location: ${profile.currentLocation}.
 Target Roles:
 - Primary: ${profile.targetRoles.primary.join(", ")}
 - Secondary: ${profile.targetRoles.secondary.join(", ")}
 - Hybrid: ${profile.targetRoles.hybrid.join(", ")}
+Visa sponsorship needed for overseas roles: ${profile.needsVisaSponsorship ? "yes" : "not specified"}.
 
 TARGET GEOGRAPHY & ELIGIBILITY RULES:
-- The candidate lives in Türkiye.
-- The candidate seeks international roles (US, UK, Europe, Global Remote) and local Türkiye roles.
+- The candidate lives in ${profile.currentLocation}.
+- The candidate seeks international roles (US, UK, Europe, Global Remote) and local ${profile.currentLocation} roles.
 - NEVER assume "Remote" means worldwide remote.
-- STRICT VISA RULE: For any overseas/international role (outside Türkiye), if the job does NOT explicitly offer Visa Sponsorship or Relocation, and is NOT confirmed 100% Worldwide Remote (work from anywhere via EOR/contractor), you MUST set canApplyFromTurkey: false, visaSponsorship: "not_offered", and finalVerdict: "SKIP". Do NOT classify overseas jobs without visa sponsorship as "CONSIDER"!
+- STRICT VISA RULE: For any overseas/international role (outside ${profile.currentLocation}), if the job does NOT explicitly offer Visa Sponsorship or Relocation, and is NOT confirmed 100% Worldwide Remote (work from anywhere via EOR/contractor), you MUST set canApplyFromTurkey: false, visaSponsorship: "not_offered", and finalVerdict: "SKIP". Do NOT classify overseas jobs without visa sponsorship as "CONSIDER"!
 - If "Remote within EU / US / UK only" or "Remote from: USA/UK" or "Must have local work permit / No visa sponsorship", flag it immediately as NOT eligible from Turkey (canApplyFromTurkey: false, finalVerdict: "SKIP").
 - CRITICAL: If an overseas job requires candidates to reside in the US (e.g. "Remote from: USA", "US Only", "Must reside in the US", "located in San Francisco/New York") and does NOT offer visa sponsorship or relocation, set canApplyFromTurkey: false and finalVerdict: "SKIP", regardless of skill match.
-- STRICT HYBRID / ON-SITE RULE: For any overseas/international role (outside Türkiye), if the job is HYBRID or ON-SITE (e.g. requires office attendance, has '(hybrid)', '[hybrid]', 'hybrid', 'hibrit', 'on-site', 'in-office') and does NOT explicitly provide Visa Sponsorship AND Relocation, it CANNOT be worked from Türkiye. You MUST set canApplyFromTurkey: false, remoteFromTurkey: false, visaSponsorship: "not_offered", and finalVerdict: "SKIP". Foreign hybrid jobs CANNOT be worked remotely from Türkiye via EOR!
-- If the job is located in Türkiye, visa is not required (canApplyFromTurkey: true).
-- If Türkiye is eligible (e.g. 100% Worldwide remote without country lock, EOR/Deel, or Visa Sponsorship / Relocation offered), mark eligible (canApplyFromTurkey: true).
+- STRICT HYBRID / ON-SITE RULE: For any overseas/international role (outside ${profile.currentLocation}), if the job is HYBRID or ON-SITE (e.g. requires office attendance, has '(hybrid)', '[hybrid]', 'hybrid', 'hibrit', 'on-site', 'in-office') and does NOT explicitly provide Visa Sponsorship AND Relocation, it CANNOT be worked from ${profile.currentLocation}. You MUST set canApplyFromTurkey: false, remoteFromTurkey: false, visaSponsorship: "not_offered", and finalVerdict: "SKIP". Foreign hybrid jobs CANNOT be worked remotely from ${profile.currentLocation} via EOR!
+- If the job is located in ${profile.currentLocation}, visa is not required (canApplyFromTurkey: true).
+- If ${profile.currentLocation} is eligible (e.g. 100% Worldwide remote without country lock, EOR/Deel, or Visa Sponsorship / Relocation offered), mark eligible (canApplyFromTurkey: true).
 - If canApplyFromTurkey is false, finalVerdict MUST ALWAYS be "SKIP".
-- IMPORTANT RULE ON ROLES: Do NOT evaluate the candidate only through a Product Management title lens. The candidate has performed substantial technical project management, delivery coordination, SDK release management, and EMVCo certification processes. Identify transferable project management skills for Project Manager roles.
+- IMPORTANT RULE ON ROLES: Do NOT evaluate the candidate only through a Product Management title lens. Identify the candidate's transferable skills from the profile below for both Product and Project Management style roles where relevant.
 - NEVER fabricate experience. If a requirement is missing, label it as a GAP.
 
 Output strictly valid JSON matching this schema:
@@ -345,6 +349,13 @@ export function detectWorkModel(
 // Built-in intelligent heuristic engine (Runs 100% offline / without API key)
 export function runHeuristicAnalysis(job: JobPosting, profile: MasterProfile): JobAnalysis {
   // Normalize geo to avoid default fallbacks overriding real locations
+  const homeRaw = homeCountryOf(profile);
+  const home = homeRaw || "ikamet ettiğiniz ülke";
+  const homeLc = homeRaw.toLowerCase();
+  const homeIsTR = /^(türkiye|turkey|turkiye)$/i.test(homeRaw.trim());
+  const homeCanonLc = homeRaw ? parseGeoLocation(homeRaw).country.toLowerCase() : "";
+  const mentionsHome = (t: string) => (homeIsTR ? /turkey|türkiye/.test(t) : Boolean(homeLc) && t.includes(homeLc));
+  const plan = buildSearchPlan(profile);
   const normalizedGeo = parseGeoLocation(job.location || job.country);
   const effectiveCountry = (job.country && job.country !== "Worldwide Remote") ? job.country : normalizedGeo.country;
   const effectiveLocation = job.location || normalizedGeo.location;
@@ -378,8 +389,10 @@ export function runHeuristicAnalysis(job: JobPosting, profile: MasterProfile): J
     roleType = "HYBRID";
   } else if (isProject) {
     roleType = "PROJECT";
-  } else {
+  } else if (isProduct) {
     roleType = "PRODUCT";
+  } else {
+    roleType = "OTHER";
   }
 
   // 2. Eligibility checks
@@ -405,15 +418,23 @@ export function runHeuristicAnalysis(job: JobPosting, profile: MasterProfile): J
     text.includes("relocation assistance") ||
     text.includes("relocation support");
 
-  const isTurkeyJob = 
-    effectiveCountry.toLowerCase() === "türkiye" ||
-    locLower.includes("turkey") ||
-    locLower.includes("türkiye") || 
-    locLower.includes("istanbul") || 
-    locLower.includes("ankara") || 
-    locLower.includes("izmir") ||
-    text.includes("türkiye") || 
-    text.includes("turkey");
+  const targetCountriesLc = (profile.targetCountries || []).map((c) => c.toLowerCase());
+  // Çalışma izni için vize gerekmiyorsa (profilde açıkça işaretlenmişse) hedef ülkelerdeki ilanlar da yerel sayılır
+  const visaFreeTarget =
+    profile.needsVisaSponsorship === false &&
+    targetCountriesLc.some((c) => c && (effectiveCountry.toLowerCase() === c || locLower.includes(c)));
+  const isHomeJob =
+    visaFreeTarget ||
+    (homeIsTR
+      ? effectiveCountry.toLowerCase() === "türkiye" ||
+        locLower.includes("turkey") ||
+        locLower.includes("türkiye") ||
+        locLower.includes("istanbul") ||
+        locLower.includes("ankara") ||
+        locLower.includes("izmir") ||
+        text.includes("türkiye") ||
+        text.includes("turkey")
+      : Boolean(homeLc) && (effectiveCountry.toLowerCase() === homeCanonLc || effectiveCountry.toLowerCase() === homeLc || locLower.includes(homeLc)));
 
   // Country lock indicators
   const isUsOnly = 
@@ -468,7 +489,7 @@ export function runHeuristicAnalysis(job: JobPosting, profile: MasterProfile): J
     text.includes("based in germany");
 
   const isSpecificForeignCountry = 
-    !isTurkeyJob && 
+    !isHomeJob && 
     effectiveCountry !== "Worldwide Remote" && 
     effectiveCountry !== "Global Remote" && 
     effectiveCountry !== "Remote" && 
@@ -518,7 +539,7 @@ export function runHeuristicAnalysis(job: JobPosting, profile: MasterProfile): J
   let isCountryLocked = false;
   let lockedReason = "";
 
-  if (!isTurkeyJob && !hasSponsorship) {
+  if (!isHomeJob && !hasSponsorship) {
     if (isUsOnly) {
       isCountryLocked = true;
       lockedReason = "Yalnızca ABD (USA) sınırları içinden uzaktan çalışma kabul ediliyor (Remote from: USA / US Only)";
@@ -536,7 +557,7 @@ export function runHeuristicAnalysis(job: JobPosting, profile: MasterProfile): J
         const match = text.match(pat);
         if (match) {
           const matchedText = match[0].toLowerCase();
-          if (!matchedText.includes("turkey") && !matchedText.includes("türkiye")) {
+          if (!mentionsHome(matchedText)) {
             isCountryLocked = true;
             lockedReason = match[0];
             break;
@@ -588,11 +609,11 @@ export function runHeuristicAnalysis(job: JobPosting, profile: MasterProfile): J
   let visaSponsorship: JobAnalysis["eligibility"]["visaSponsorship"] = "unclear";
   let eligibilitySummary = "";
 
-  if (isTurkeyJob) {
+  if (isHomeJob) {
     canApplyFromTurkey = true;
     remoteFromTurkey = job.workModel === "remote" ? true : "unclear";
     visaSponsorship = "unclear";
-    eligibilitySummary = "Pozisyon Türkiye merkezli olduğundan yasal veya lokasyon engeli bulunmuyor.";
+    eligibilitySummary = `Pozisyon ${home} merkezli olduğundan yasal veya lokasyon engeli bulunmuyor.`;
   } else if (isHybridOrOnsite) {
     // Foreign hybrid or on-site role: strictly requires physical office attendance abroad!
     if (hasSponsorship) {
@@ -600,18 +621,18 @@ export function runHeuristicAnalysis(job: JobPosting, profile: MasterProfile): J
       remoteFromTurkey = false; // Cannot be remote from Turkey because of regular office attendance abroad
       relocationOffered = true;
       visaSponsorship = "offered";
-      eligibilitySummary = `İlan yurtdışında ${job.workModel === "onsite" ? "ofiste" : "hibrit"} çalışma modeli gerektirmektedir. Vize sponsorluğu ve relokasyon desteği belirtildiğinden taşınarak çalışma amacıyla Türkiye'den başvuruya uygundur.`;
+      eligibilitySummary = `İlan yurtdışında ${job.workModel === "onsite" ? "ofiste" : "hibrit"} çalışma modeli gerektirmektedir. Vize sponsorluğu ve relokasyon desteği belirtildiğinden taşınarak çalışma amacıyla ${home} konumundan başvuruya uygundur.`;
     } else {
       canApplyFromTurkey = false;
       remoteFromTurkey = false;
       visaSponsorship = "not_offered";
-      eligibilitySummary = `İlan ${job.workModel === "onsite" ? "ofiste (on-site)" : "hibrit (ofis + ev)"} çalışma modeli gerektirmekte ve yurtdışındaki ofise fiziksel katılım beklemektedir. Vize sponsorluğu veya relokasyon desteği bulunmadığından Türkiye'de ikamet eden adaylar için uygun değildir.`;
+      eligibilitySummary = `İlan ${job.workModel === "onsite" ? "ofiste (on-site)" : "hibrit (ofis + ev)"} çalışma modeli gerektirmekte ve yurtdışındaki ofise fiziksel katılım beklemektedir. Vize sponsorluğu veya relokasyon desteği bulunmadığından ${home} konumunda ikamet eden adaylar için uygun değildir.`;
     }
   } else if (isCountryLocked) {
     canApplyFromTurkey = false;
     remoteFromTurkey = false;
     visaSponsorship = "not_offered";
-    eligibilitySummary = `İlan uzaktan çalışma (remote) görünse de adayın ilgili ülkede yerel ikamet etmesini şart koşuyor (${lockedReason}). Vize veya relokasyon desteği bulunmadığından Türkiye'de ikamet eden adaylar için uygun değildir.`;
+    eligibilitySummary = `İlan uzaktan çalışma (remote) görünse de adayın ilgili ülkede yerel ikamet etmesini şart koşuyor (${lockedReason}). Vize veya relokasyon desteği bulunmadığından ${home} konumunda ikamet eden adaylar için uygun değildir.`;
   } else if (hasNoSponsorship && (isRestrictedRemote || job.workModel === "onsite" || job.workModel === "hybrid")) {
     canApplyFromTurkey = false;
     remoteFromTurkey = false;
@@ -622,72 +643,79 @@ export function runHeuristicAnalysis(job: JobPosting, profile: MasterProfile): J
     relocationOffered = true;
     visaSponsorship = "offered";
     remoteFromTurkey = isWorldwideRemote ? true : "unclear";
-    eligibilitySummary = "Vize sponsorluğu veya relokasyon desteği belirtilmiş; Türkiye'den başvuruya uygun.";
+    eligibilitySummary = `Vize sponsorluğu veya relokasyon desteği belirtilmiş; ${home} konumundan başvuruya uygun.`;
   } else if (isWorldwideRemote) {
     canApplyFromTurkey = true;
     remoteFromTurkey = true;
     visaSponsorship = "unclear";
-    eligibilitySummary = "Global / Worldwide remote ve EOR desteği mevcut; Türkiye'den çalışılabilir.";
+    eligibilitySummary = `Global / Worldwide remote ve EOR desteği mevcut; ${home} konumundan çalışılabilir.`;
   } else {
     // Overseas job without confirmed worldwide remote and without sponsorship
     canApplyFromTurkey = false;
     remoteFromTurkey = false;
     visaSponsorship = "not_offered";
-    eligibilitySummary = "İlan yurtdışı merkezli olup Türkiye'den başvuru için vize sponsorluğu veya relokasyon desteği belirtilmemiştir. Vize sponsoru bulunmadığından Türkiye'den başvuruya uygun değildir.";
+    eligibilitySummary = `İlan yurtdışı merkezli olup ${home} konumundan başvuru için vize sponsorluğu veya relokasyon desteği belirtilmemiştir. Vize sponsoru bulunmadığından ${home} konumundan başvuruya uygun değildir.`;
   }
 
-  // 3. Domain matches
+  // 3. Profil ile ilan eşleşmesi (tamamen profildeki verilerden; sabit alan/sektör varsayımı yok)
   const strongMatches: string[] = [];
   const transferableExperience: string[] = [];
   const gaps: string[] = [];
   const redFlags: string[] = [];
 
-  if (text.includes("softpos") || text.includes("pos") || text.includes("payment") || text.includes("ödeme")) {
-    strongMatches.push("SoftPOS ve Ödeme Sistemleri (Payment Gateways) uzmanlığı");
-  }
-  if (text.includes("sdk") || text.includes("mastercard") || text.includes("emvco") || text.includes("hce")) {
-    strongMatches.push("Mastercard SDK, HCE ve EMVCo sertifikasyon tecrübesi");
-  }
-  if (text.includes("b2b") || text.includes("dashboard") || text.includes("merchant") || text.includes("üye işyeri")) {
-    strongMatches.push("B2B Merchant yönetim paneli ve back-office ürün sahipliği");
-  }
-  if (text.includes("jira") || text.includes("agile") || text.includes("scrum") || text.includes("backlog")) {
-    strongMatches.push("Agile / Scrum metodolojisi ve Jira ile sprint & backlog yönetimi");
-  }
-  if (text.includes("api") || text.includes("integration") || text.includes("entegrasyon")) {
-    strongMatches.push("REST API ve backend teknik gereksinim analizi");
-  }
-  if (isProject) {
-    strongMatches.push("Agile / Scrum teslimat koordinasyonu, sprint takvimi ve teknik bağımlılık yönetimi");
-  }
+  const escapeRe = (x: string) => x.replace(/[.*+?^${}()|[\]\\/]/g, "\\$&");
+  const hasTerm = (haystack: string, term: string) =>
+    new RegExp(`(^|[^\\p{L}0-9])${escapeRe(term.toLowerCase())}([^\\p{L}0-9]|$)`, "iu").test(haystack);
 
-  // Transferable
-  if (text.includes("project manager") || text.includes("delivery") || text.includes("timeline")) {
-    transferableExperience.push("Product Manager rolünde yürütülen teknik teslimat ve çapraz fonksiyonel koordinasyon");
-  }
-  if (text.includes("e-commerce") || text.includes("e-ticaret") || text.includes("shopify")) {
-    transferableExperience.push("Graycat Studio kurucu ortaklığından gelen e-ticaret ve D2C dinamikleri");
-  }
+  // Başlık, hedef rollerinizden biriyle uyumlu mu?
+  const titleFits = planAccepts(job.title, plan);
+  if (titleFits) strongMatches.push(`Pozisyon başlığı hedef rollerinizle uyumlu: ${job.title}`);
+
+  // İlanda geçen ve profilinizde bulunan beceriler
+  const profileSkills = Array.from(
+    new Set([...(profile.skills || []), ...profile.coreExperience.flatMap((e) => [...e.tools, ...e.technologies, ...e.fintechDomains])].filter(Boolean))
+  );
+  const matchedSkills = profileSkills.filter((sk) => hasTerm(text, sk)).slice(0, 6);
+  for (const sk of matchedSkills) strongMatches.push(`${sk} deneyimi (ilanda geçiyor)`);
+
+  // İlanda geçen ama profilinizde bulunmayan bilinen beceri/araçlar (eksik gereksinimler)
+  const profileSkillsLc = profileSkills.map((x) => x.toLowerCase());
+  const descLc = (job.rawDescription || "").toLowerCase();
+  const missingSkills = SKILL_DICTIONARY.filter(
+    (sk) =>
+      hasTerm(descLc, sk) &&
+      !profileSkillsLc.some((ps) => ps === sk.toLowerCase() || ps.includes(sk.toLowerCase()) || sk.toLowerCase().includes(ps))
+  ).slice(0, 6);
+  for (const sk of missingSkills) gaps.push(`${sk}: ilanda geçiyor, profilinizde belirtilmemiş`);
+
+  // Aktarılabilir deneyim: ilan metniyle en çok örtüşen profil maddeleri
+  const jobWordSet = new Set(text.split(/[^a-zçğıöşü0-9+#.]+/i).filter((w) => w.length > 3));
+  const rankedHighlights = profile.coreExperience
+    .flatMap((e) => e.highlights.map((h) => ({ h, company: e.company })))
+    .map((x) => ({ ...x, score: x.h.toLowerCase().split(/[^a-zçğıöşü0-9+#.]+/i).filter((w) => jobWordSet.has(w)).length }))
+    .filter((x) => x.score >= 2)
+    .sort((x, y) => y.score - x.score);
+  for (const x of rankedHighlights.slice(0, 3)) transferableExperience.push(x.h);
 
   // Red flags
-  if (!isTurkeyJob && isHybridOrOnsite && !hasSponsorship) {
+  if (!isHomeJob && isHybridOrOnsite && !hasSponsorship) {
     redFlags.push(`Yurtdışı ofiste ${job.workModel === "onsite" ? "fiziki/ofis" : "hibrit"} katılım şartı (Vize/relokasyon desteği yok)`);
   }
   if (isCountryLocked) {
     redFlags.push(`Ülke kısıtlamalı remote: Yalnızca ilgili ülkede yerel ikamet edenler kabul ediliyor (${lockedReason})`);
   }
-  if (!isTurkeyJob && !isWorldwideRemote && !hasSponsorship && !redFlags.some(r => r.includes("Vize sponsorluğu"))) {
+  if (!isHomeJob && !isWorldwideRemote && !hasSponsorship && !redFlags.some(r => r.includes("Vize sponsorluğu"))) {
     redFlags.push("Vize sponsorluğu sunulmuyor veya belirtilmemiş (Yurtdışı pozisyon)");
   }
-  if (hasNoSponsorship && !isTurkeyJob && !redFlags.some(r => r.includes("Vize sponsorluğu"))) {
+  if (hasNoSponsorship && !isHomeJob && !redFlags.some(r => r.includes("Vize sponsorluğu"))) {
     redFlags.push("Vize sponsorluğu sunulmuyor (No sponsorship)");
   }
   if (isRestrictedRemote && !isCountryLocked) {
     redFlags.push("Remote çalışma belirli bir ülke/bölge (EU/US/UK) ile sınırlandırılmış");
   }
-  if (text.includes("7+ years") || text.includes("8+ years") || text.includes("10+ years") || text.includes("director")) {
+  if (profile.yearsOfExperience < 7 && (text.includes("7+ years") || text.includes("8+ years") || text.includes("10+ years") || text.includes("director"))) {
     redFlags.push("Yüksek kıdem seviyesi gereksinimi (7+ yıl)");
-    gaps.push("Beklenen kıdem yılı (Aday 4+ yıl)");
+    gaps.push(`Beklenen kıdem yılı (Aday ${profile.yearsOfExperience}+ yıl)`);
   }
 
   // Final Verdict determination
@@ -696,25 +724,55 @@ export function runHeuristicAnalysis(job: JobPosting, profile: MasterProfile): J
 
   if (canApplyFromTurkey === false) {
     finalVerdict = "SKIP";
-    oneSentenceReason = eligibilitySummary || "Lokasyon ve yasal kısıtlar nedeniyle Türkiye'den başvuruya uygun değildir.";
+    oneSentenceReason = eligibilitySummary || `Lokasyon ve yasal kısıtlar nedeniyle ${home} konumundan başvuruya uygun değildir.`;
   } else if (isCountryLocked) {
     finalVerdict = "SKIP";
-    oneSentenceReason = `İlan uzaktan çalışma (remote) görünse de yalnızca ilgili ülkede yerel ikamet edenleri kabul ediyor (${lockedReason}); Türkiye'den başvuruya kapalıdır.`;
-  } else if (!isTurkeyJob && !isWorldwideRemote && !hasSponsorship) {
+    oneSentenceReason = `İlan uzaktan çalışma (remote) görünse de yalnızca ilgili ülkede yerel ikamet edenleri kabul ediyor (${lockedReason}); ${home} konumundan başvuruya kapalıdır.`;
+  } else if (!isHomeJob && !isWorldwideRemote && !hasSponsorship) {
     finalVerdict = "SKIP";
-    oneSentenceReason = "Yurtdışı pozisyon için vize sponsorluğu veya relokasyon desteği belirtilmemiştir; Türkiye'den çalışma izni/vize olmadan başvuru yapılamaz.";
-  } else if (hasNoSponsorship && !isTurkeyJob && !isWorldwideRemote) {
+    oneSentenceReason = `Yurtdışı pozisyon için vize sponsorluğu veya relokasyon desteği belirtilmemiştir; ${home} konumundan çalışma izni/vize olmadan başvuru yapılamaz.`;
+  } else if (hasNoSponsorship && !isHomeJob && !isWorldwideRemote) {
     finalVerdict = "SKIP";
     oneSentenceReason = "Teknik gereksinimler uygun olsa da vize sponsorluğu verilmiyor ve yerel çalışma izni zorunlu tutuluyor.";
   } else if (strongMatches.length >= 2 && canApplyFromTurkey === true) {
     finalVerdict = "APPLY";
-    oneSentenceReason = `İlandaki temel gereksinimler (${strongMatches[0] || "fintech/ürün yönetimi"}) adayın deneyimiyle güçlü şekilde örtüşüyor.`;
-  } else if (gaps.length > 2) {
+    oneSentenceReason = `İlandaki temel gereksinimler (${strongMatches[0] || "hedef rol"}) profilinizle güçlü şekilde örtüşüyor.`;
+  } else if (gaps.length > 4) {
     finalVerdict = "SKIP";
     oneSentenceReason = "Deneyim eksiklikleri veya lokasyon kısıtları nedeniyle başvuru öncelikli önerilmiyor.";
   } else {
     finalVerdict = "CONSIDER";
     oneSentenceReason = "Profil ile uyumlu noktalar bulunuyor ancak çalışma şartları veya detayların teyit edilmesi tavsiye edilir.";
+  }
+
+  // 4. Hedef ülke / bölge ve çalışma şekli tercihleri (profildeki konum tercihleri)
+  const geoText = `${effectiveCountry} ${effectiveLocation}`;
+  const jobCountry = detectCountry(geoText);
+  const isWorldwideJob = !jobCountry && /worldwide|global remote|anywhere/i.test(geoText);
+  const targetList = profile.targetCountries || [];
+  const outOfTarget =
+    !isHomeJob && !isWorldwideJob && Boolean(jobCountry) && targetList.length > 0 && !countryMatchesTargets(jobCountry as string, targetList);
+
+  const explicitHybrid =
+    /\b(hybrid|hibrit)\b/i.test(`${job.title} ${job.location}`) || /\b(days? (?:in|a|per) (?:the )?office|office attendance)\b/i.test(text);
+  const explicitOnsite = /\bon-?site\b/i.test(`${job.title} ${job.location}`) || /\bon-?site\b/i.test(text);
+  const workPref = profile.workPreference || "any";
+  const prefMismatch = (workPref === "remote" && (explicitHybrid || explicitOnsite)) || (workPref === "hybrid" && explicitOnsite);
+
+  if (outOfTarget) {
+    redFlags.push(`İlan hedef ülke/bölgelerinizin dışında (${jobCountry})`);
+    if (finalVerdict !== "SKIP") {
+      finalVerdict = "SKIP";
+      oneSentenceReason = `İlan ${jobCountry} merkezli; hedef ülke/bölgelerinizin (${targetList.join(", ")}) dışında kalıyor.`;
+    }
+  }
+  if (prefMismatch) {
+    const need = workPref === "remote" ? "yalnızca uzaktan" : "uzaktan veya hibrit";
+    redFlags.push(`Çalışma şekli tercihinizle uyuşmuyor (siz ${need} çalışmak istiyorsunuz; ilan ${explicitOnsite ? "ofis" : "hibrit"} gerektiriyor)`);
+    if (finalVerdict !== "SKIP") {
+      finalVerdict = "SKIP";
+      oneSentenceReason = `Çalışma şekli tercihinizle (${need}) uyuşmuyor: ilan ${explicitOnsite ? "ofiste çalışma" : "hibrit çalışma"} gerektiriyor.`;
+    }
   }
 
   return {
@@ -726,82 +784,108 @@ export function runHeuristicAnalysis(job: JobPosting, profile: MasterProfile): J
       visaSponsorship,
       summary: eligibilitySummary
     },
-    strongMatches: strongMatches.length ? strongMatches : ["Yazılım ve ürün geliştirme süreçleri deneyimi", "Paydaş ve ekip koordinasyonu"],
-    transferableExperience: transferableExperience.length ? transferableExperience : ["Teknik ekiplerle koordinasyon ve teslimat yönetimi"],
+    strongMatches: strongMatches.length ? strongMatches : ["İlan metninde profilinizle doğrudan örtüşen bir beceri/başlık bulunamadı"],
+    transferableExperience: transferableExperience.length ? transferableExperience : ["Profilinizdeki deneyimlerle ilan metni arasında belirgin bir örtüşme tespit edilemedi"],
     gaps,
-    productFit: ["Ürün yaşam döngüsü, backlog ve kullanıcı gereksinim analizi adayın PM deneyimiyle örtüşmektedir."],
-    projectFit: ["Teslimat takvimi, paydaş iletişimi ve mühendislik koordinasyonu tecrübesi rolü desteklemektedir."],
-    experienceToEmphasize: [
-      "ProvisionPay bünyesinde yönetilen SoftPOS ve ödeme altyapısı projeleri",
-      "B2B kurumsal merchant panelleri ve API entegrasyonları"
-    ],
+    productFit: roleType === "PRODUCT" || roleType === "HYBRID" ? ["Ürün odaklı bir rol; profilinizdeki ürün/iş gereksinimi deneyimleri değerlendirilmeli."] : [],
+    projectFit: roleType === "PROJECT" || roleType === "HYBRID" ? ["Teslimat/koordinasyon odaklı bir rol; profilinizdeki proje ve paydaş yönetimi deneyimleri değerlendirilmeli."] : [],
+    experienceToEmphasize: rankedHighlights.length
+      ? rankedHighlights.slice(0, 3).map((x) => (x.company ? `${x.company}: ${x.h}` : x.h))
+      : profile.coreExperience.slice(0, 2).map((e) => `${e.title}${e.company ? " — " + e.company : ""}`.trim()).filter(Boolean),
     redFlags,
-    interviewRisks: [
-      {
-        requirement: "İlanda aranan spesifik teknoloji veya pazar regülasyonları",
-        candidateExperience: "Ödeme sistemleri, EMVCo ve SDK altyapılarında doğrudan pratik çalışma",
-        gap: "Şirketin kullandığı spesifik iç araçlar veya farklı bir ödeme şeması",
-        honestStrategy: "Mevcut ödeme protokolü ve SDK deneyiminin hızla transfer edilebileceğini somut örneklerle ifade etmek."
-      }
-    ],
+    interviewRisks: missingSkills.slice(0, 3).map((sk) => ({
+      requirement: `${sk} bilgisi/deneyimi`,
+      candidateExperience: "Profilinizde bu beceri belirtilmemiş",
+      gap: `İlan ${sk} gerektiriyor; profilinizde doğrudan karşılığı görünmüyor`,
+      honestStrategy: `Doğrudan deneyiminiz yoksa bunu açıkça söyleyin; benzer bir araç/yaklaşımla elde ettiğiniz somut bir sonucu örnekleyip ${sk} için öğrenme planınızı belirtin.`
+    })),
     finalVerdict,
     oneSentenceReason,
     analyzedAt: new Date().toISOString()
   };
 }
 
-// Built-in intelligent heuristic generator for Application Package
+// Built-in rule-based generator for Application Package (profil verisinden dinamik üretir)
 export function runHeuristicGenerator(job: JobPosting, profile: MasterProfile): ApplicationPackage {
   const isPjM = job.analysis?.roleType === "PROJECT";
-  
+  const years = profile.yearsOfExperience > 0 ? `${profile.yearsOfExperience}+ yıl` : "";
+  const yearsEn = profile.yearsOfExperience > 0 ? `${profile.yearsOfExperience}+ years` : "";
+  const latest = profile.coreExperience[0];
+  const company = latest?.company || "";
+  const role = latest?.title || profile.targetTitle;
+
+  // İlan metni ile profil becerileri arasındaki kesişim (uydurma yok: yalnızca profilde olan beceriler)
+  const jobText = (job.title + " " + job.rawDescription).toLowerCase();
+  const skills = profile.skills || [];
+  const matched = skills.filter((s) => jobText.includes(s.toLowerCase())).slice(0, 6);
+  const topSkills = (matched.length ? matched : skills.slice(0, 5)).join(", ");
+
+  const allHighlights = profile.coreExperience.flatMap((e) => e.highlights).filter(Boolean);
+  const jobWords = new Set(jobText.split(/[^a-zçğıöşü0-9+#.]+/i).filter((w) => w.length > 3));
+  const scored = allHighlights
+    .map((h) => ({ h, score: h.toLowerCase().split(/[^a-zçğıöşü0-9+#.]+/i).filter((w) => jobWords.has(w)).length }))
+    .sort((x, y) => y.score - x.score)
+    .map((x) => x.h);
+  const bestBullets = scored.slice(0, 3);
+
+  const summaryBase = profile.summary?.trim();
+  const tailoredCvSummary = [
+    `${profile.name}${years ? `, ${years} deneyime sahip` : ","} ${role}${company ? ` (${company})` : ""}.`,
+    topSkills ? `${isPjM ? "Teslimat ve koordinasyon" : "Ürün ve iş"} odağında ${topSkills} alanlarında deneyimli.` : "",
+    summaryBase ? summaryBase.slice(0, 240) : ""
+  ].filter(Boolean).join(" ");
+
+  const flavorBullets = (flavor: "Product Manager" | "Project Manager") => ({
+    roleFlavor: flavor,
+    bullets: bestBullets.length
+      ? bestBullets
+      : [`${job.company} için ${flavor === "Product Manager" ? "ürün" : "proje"} odaklı deneyiminizi profilinizden ekleyin.`]
+  });
+
+  const experienceLineEn = company
+    ? `With ${yearsEn || "solid"} of experience, most recently as ${role} at ${company}, I have built a track record in ${topSkills || "delivering results across teams"}.`
+    : `With ${yearsEn || "solid"} of professional experience as ${role}, I have built a track record in ${topSkills || "delivering results across teams"}.`;
+  const experienceLineTr = company
+    ? `${years ? years + "lık" : ""} deneyimimle, en son ${company} bünyesinde ${role} olarak ${topSkills || "ekipler arası teslimat"} alanlarında çalıştım.`
+    : `${years ? years + "lık" : ""} deneyimimle ${role} olarak ${topSkills || "ekipler arası teslimat"} alanlarında çalıştım.`;
+  const highlightEn = bestBullets[0] ? `
+
+A relevant example from my background: ${bestBullets[0]}` : "";
+  const highlightTr = bestBullets[0] ? `
+
+Geçmişimden ilgili bir örnek: ${bestBullets[0]}` : "";
+
   return {
-    tailoredCvSummary: isPjM
-      ? `${profile.name}, ödeme teknolojileri (SoftPOS, HCE, Mastercard SDK) ve B2B SaaS platformlarında 4+ yıllık teknik proje koordinasyonu ve ürün teslimatı deneyimine sahip profesyonel. Karmaşık entegrasyonlar, EMVCo sertifikasyon takvimleri ve çapraz fonksiyonel mühendislik ekipleri yönetiminde kanıtlanmış başarı.`
-      : `${profile.name}, ödeme sistemleri, SoftPOS ve B2B kurumsal merchant yönetim platformlarında 4 yılı aşkın uçtan uca ürün yönetimi (Product Management) deneyimine sahip Product Manager. SDK/API entegrasyonları, ürün yol haritası (roadmap) ve backlog önceliklendirmesinde güçlü uzmanlık.`,
+    tailoredCvSummary,
     tailoredBulletPoints: [
-      {
-        roleFlavor: "Product Manager",
-        bullets: [
-          `${job.company} gereksinimlerine uygun olarak; SoftPOS ve mobil ödeme çözümlerinin vizyon, roadmap ve sprint backlog süreçlerini yönetti.`,
-          "Merchant kayıt, terminal yönetimi ve işlem raporlamasını içeren B2B back-office platformunun ürün gereksinimlerini (PRD) hazırladı.",
-          "Geliştirici ve QA ekipleriyle yakın çalışarak kabul kriterlerini (acceptance criteria) ve kullanıcı deneyimi standartlarını belirledi."
-        ]
-      },
-      {
-        roleFlavor: "Project Manager",
-        bullets: [
-          `SoftPOS çözümünün harici kurumsal ortaklara entegrasyonunda teknik bağımlılıkları ve kritik teslimat takvimini başarıyla koordine etti.`,
-          "Mastercard SDK ve EMVCo sertifikasyon süreçlerinde mühendislik, güvenlik ve test ekipleri arasındaki riskleri yönetti."
-        ]
-      }
+      flavorBullets("Product Manager"),
+      flavorBullets("Project Manager")
     ],
     coverLetterEn: `Dear Hiring Team at ${job.company},
 
-I am writing to express my enthusiastic interest in the ${job.title} opportunity. With over 4 years of hands-on experience at ProvisionPay managing SoftPOS, HCE, and Mastercard SDK payment products, I have developed deep expertise in payment technologies and technical delivery.
+I am writing to express my interest in the ${job.title} opportunity. ${experienceLineEn}${highlightEn}
 
-In my current role, I own B2B merchant back-office portals, coordinate complex certification pipelines, and drive cross-functional delivery between engineering squads and key clients. My background provides a unique blend of strategic product thinking and rigorous project execution.
-
-I would welcome the opportunity to discuss how my payments background and track record of delivery can contribute to ${job.company}'s continued success.
+I would welcome the opportunity to discuss how my background can contribute to ${job.company}'s success.
 
 Sincerely,
 ${profile.name}`,
     coverLetterTr: `Sayın ${job.company} İşe Alım Ekibi,
 
-Bünyenizde açılan ${job.title} pozisyonuna başvurmaktan büyük bir memnuniyet duyuyorum. ProvisionPay'de 4 yılı aşkın süredir SoftPOS, HCE, Mastercard SDK tabanlı ödeme çözümleri ve B2B merchant yönetim panellerinin ürün yaşam döngüsünü ve teknik teslimat koordinasyonunu yürütmekteyim.
+Bünyenizde açılan ${job.title} pozisyonuna başvurmak istiyorum. ${experienceLineTr}${highlightTr}
 
-Çapraz fonksiyonel mühendislik ekipleriyle yürüttüğüm sprint süreçleri, EMVCo sertifikasyon deneyimim ve ürün sahipliği vizyonumla ${job.company}'nin hedeflerine somut değer katacağıma inanıyorum.
+Deneyimimin ${job.company}'nin hedeflerine katkı sağlayacağına inanıyor, görüşme fırsatı için teşekkür ediyorum.
 
 Saygılarımla,
 ${profile.name}`,
-    recruiterMessage: `Hi there! I noticed the ${job.title} role at ${job.company}. Having managed SoftPOS, Mastercard SDK & B2B merchant platforms for 4+ yrs at ProvisionPay, I'd love to connect and share how my payments background aligns!`,
+    recruiterMessage: `Hi! I saw the ${job.title} role at ${job.company}. ${yearsEn ? yearsEn + " in " : "Experienced in "}${topSkills || role} – I'd love to connect and share how my background fits.`.slice(0, 300),
     screeningAnswers: [
       {
         question: `Why do you want to join ${job.company}?`,
-        answer: `${job.company}'s work and product vision align directly with my 4+ years of specialized experience in payment technologies, merchant dashboards, and API/SDK integrations.`
+        answer: `${job.company}'s work aligns with my experience${topSkills ? " in " + topSkills : ""}. (Bu cevabı şirkete özel gerekçenizle kişiselleştirin.)`
       },
       {
-        question: "Tell us about a challenging technical project you delivered.",
-        answer: "At ProvisionPay, I led the delivery of a SoftPOS and Mastercard SDK rollout, coordinating EMVCo certification requirements and synchronizing engineering, QA, and external banking stakeholders under tight deadlines."
+        question: "Tell us about a challenging project you delivered.",
+        answer: bestBullets[0] || "Profilinize bir deneyim başarısı ekleyerek bu cevabı oluşturabilirsiniz."
       }
     ],
     generatedAt: new Date().toISOString()

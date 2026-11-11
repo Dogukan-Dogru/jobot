@@ -81,7 +81,7 @@ export const TableView: React.FC<TableViewProps> = ({
             onChange={(e) => setVerdictFilter(e.target.value)}
             className="px-3 py-1.5 text-xs font-semibold rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-indigo-500"
           >
-            <option value="all">Tüm AI Kararları</option>
+            <option value="all">Tüm Kararlar</option>
             <option value="APPLY">Yalnızca APPLY (Başvur)</option>
             <option value="CONSIDER">Yalnızca CONSIDER (İncele)</option>
             <option value="SKIP">Yalnızca SKIP (Pas Geç)</option>
@@ -113,7 +113,7 @@ export const TableView: React.FC<TableViewProps> = ({
                 <th className="py-3 px-4">Pozisyon & Şirket</th>
                 <th className="py-3 px-3">Rol Tipi</th>
                 <th className="py-3 px-3">Konum & Model</th>
-                <th className="py-3 px-3">AI Kararı</th>
+                <th className="py-3 px-3">Karar</th>
                 <th className="py-3 px-3">TR / Vize Durumu</th>
                 <th className="py-3 px-3">Başvuru Durumu</th>
                 <th className="py-3 px-3 text-right">İşlemler</th>

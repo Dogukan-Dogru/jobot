@@ -27,7 +27,7 @@ export const AddJobModal: React.FC<AddJobModalProps> = ({
   onClose,
   onAddJob
 }) => {
-  const [activeTab, setActiveTab] = useState<"paste" | "link" | "presets">("paste");
+  const [activeTab, setActiveTab] = useState<"paste" | "link">("paste");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isFetchingUrl, setIsFetchingUrl] = useState(false);
   const [urlFetchMessage, setUrlFetchMessage] = useState<string | null>(null);
@@ -36,7 +36,7 @@ export const AddJobModal: React.FC<AddJobModalProps> = ({
   const [title, setTitle] = useState("");
   const [company, setCompany] = useState("");
   const [location, setLocation] = useState("");
-  const [country, setCountry] = useState("Türkiye");
+  const [country, setCountry] = useState("");
   const [workModel, setWorkModel] = useState<WorkModel>("remote");
   const [salary, setSalary] = useState("");
   const [sourceUrl, setSourceUrl] = useState("");
@@ -70,59 +70,6 @@ export const AddJobModal: React.FC<AddJobModalProps> = ({
     }
   };
 
-  const handleApplyPreset = (type: "softpos" | "london" | "istanbul") => {
-    if (type === "softpos") {
-      setTitle("Product Manager - Mobile SoftPOS & Acquiring");
-      setCompany("FinPay Global");
-      setLocation("Berlin / Remote (EMEA)");
-      setCountry("Germany");
-      setWorkModel("remote");
-      setSalary("€70,000 - €85,000");
-      setPlatform("linkedin");
-      setSourceUrl("https://linkedin.com/jobs/sample-softpos");
-      setRawDescription(`We are seeking an experienced Product Manager to drive our SoftPOS and mobile acquiring technologies.
-Key Responsibilities:
-- Lead the roadmap for SoftPOS Android SDK and payment terminal merchant integrations.
-- Manage compliance with EMVCo, Mastercard and Visa certification standards.
-- Build merchant dashboards and self-service enrollment workflows.
-- Coordinate delivery timelines with backend, mobile and QA engineering teams.
-Requirements:
-- 3+ years in payment technology or fintech product/project management.
-- Deep familiarity with SoftPOS, HCE or payment SDK architectures.
-- Experience with B2B dashboards and merchant operations.
-Work arrangement: Remote EMEA (Türkiye eligible via Deel/EOR) or full relocation + visa sponsorship to Berlin.`);
-    } else if (type === "london") {
-      setTitle("Technical Project Manager - Payments API");
-      setCompany("London BankTech");
-      setLocation("London, UK (Hybrid 3 days/week)");
-      setCountry("United Kingdom");
-      setWorkModel("hybrid");
-      setSalary("£65,000");
-      setPlatform("linkedin");
-      setSourceUrl("https://linkedin.com/jobs/sample-london");
-      setRawDescription(`Seeking a Technical Project Manager in London for core banking integrations.
-Strict Requirement: Candidates must have pre-existing right to work in the UK. No visa sponsorship provided.
-Responsibilities:
-- Manage Jira boards, dependency tracking and client technical delivery.
-- Must attend the central London office 3 days per week.`);
-    } else if (type === "istanbul") {
-      setTitle("Kıdemli Ürün Yöneticisi - POS & Ödeme Geçitleri");
-      setCompany("PayTR / B2B Finans");
-      setLocation("İstanbul (Hibrit)");
-      setCountry("Türkiye");
-      setWorkModel("hybrid");
-      setSalary("130.000 TL - 170.000 TL");
-      setPlatform("kariyer");
-      setSourceUrl("https://kariyer.net/ilan/sample-pos");
-      setRawDescription(`Fintech şirketimiz için Sanal POS, SoftPOS ve Ödeme Yönlendirme (routing/taksit) altyapımızda görev alacak Ürün Yöneticisi arıyoruz.
-Aranan Nitelikler:
-- Ödeme sistemleri, SoftPOS ve üye işyeri panellerinde en az 3 yıl ürün yönetimi deneyimi.
-- REST API entegrasyonları, teknik kabul kriterleri yazımı ve Jira kullanımı.
-- Türkiye'de ikamet eden, hibrit çalışma modeline uyum sağlayabilecek adaylar.`);
-    }
-    setActiveTab("paste");
-  };
-
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!title.trim() || !company.trim() || !rawDescription.trim()) {
@@ -136,7 +83,7 @@ Aranan Nitelikler:
         title,
         company,
         location: location || "Belirtilmemiş",
-        country: country || "Türkiye",
+        country: country || location || "Belirtilmemiş",
         workModel,
         salary: salary || undefined,
         sourceUrl: sourceUrl || undefined,
@@ -164,7 +111,7 @@ Aranan Nitelikler:
             </div>
             <div>
               <h2 className="text-base font-bold text-slate-900">Yeni İş İlanı Ekle</h2>
-              <p className="text-xs text-slate-500">İlanı yapıştırın, JoBot 10 adımlı AI analiziyle eşleştirsin.</p>
+              <p className="text-xs text-slate-500">İlanı yapıştırın, JoBot profilinizle eşleştirsin.</p>
             </div>
           </div>
           <button
@@ -199,65 +146,7 @@ Aranan Nitelikler:
             <LinkIcon className="w-4 h-4" />
             <span>Link ile Getir</span>
           </button>
-          <button
-            onClick={() => setActiveTab("presets")}
-            className={`py-3 text-xs sm:text-sm font-semibold border-b-2 flex items-center gap-1.5 transition-colors ${
-              activeTab === "presets"
-                ? "border-indigo-600 text-indigo-600"
-                : "border-transparent text-slate-500 hover:text-slate-800"
-            }`}
-          >
-            <Sparkles className="w-4 h-4 text-amber-500" />
-            <span>Hızlı Test Örnekleri</span>
-          </button>
         </div>
-
-        {/* Presets Tab View */}
-        {activeTab === "presets" && (
-          <div className="p-6 space-y-3 bg-slate-50/50">
-            <p className="text-xs text-slate-600 mb-2">
-              Sistemi hemen denemek için ChatGPT sohbetindeki kriterlere uygun gerçekçi test senaryolarından birine tıklayın:
-            </p>
-            <div 
-              onClick={() => handleApplyPreset("softpos")}
-              className="p-3.5 rounded-xl border border-emerald-200 bg-emerald-50/40 hover:bg-emerald-50 hover:border-emerald-300 cursor-pointer transition-all"
-            >
-              <div className="flex items-center justify-between">
-                <span className="text-xs font-bold text-emerald-900">🟢 Örnek 1: SoftPOS & Acquiring PM (Almanya / Remote)</span>
-                <span className="text-[10px] font-semibold px-2 py-0.5 rounded bg-emerald-100 text-emerald-800">Hedef: APPLY</span>
-              </div>
-              <p className="text-xs text-slate-600 mt-1">
-                Fintech, SoftPOS ve Deel/EOR ile Türkiye'den remote çalışma imkanı içeren ideal ilan.
-              </p>
-            </div>
-
-            <div 
-              onClick={() => handleApplyPreset("london")}
-              className="p-3.5 rounded-xl border border-rose-200 bg-rose-50/40 hover:bg-rose-50 hover:border-rose-300 cursor-pointer transition-all"
-            >
-              <div className="flex items-center justify-between">
-                <span className="text-xs font-bold text-rose-900">🔴 Örnek 2: Londra TPM (Sponsorluk YOK / Yerel İzin Şart)</span>
-                <span className="text-[10px] font-semibold px-2 py-0.5 rounded bg-rose-100 text-rose-800">Hedef: SKIP</span>
-              </div>
-              <p className="text-xs text-slate-600 mt-1">
-                İngiltere çalışma izni zorunlu tutan ve vize sponsorluğu vermeyen eleme testi örneği.
-              </p>
-            </div>
-
-            <div 
-              onClick={() => handleApplyPreset("istanbul")}
-              className="p-3.5 rounded-xl border border-blue-200 bg-blue-50/40 hover:bg-blue-50 hover:border-blue-300 cursor-pointer transition-all"
-            >
-              <div className="flex items-center justify-between">
-                <span className="text-xs font-bold text-blue-900">🔵 Örnek 3: Kariyer.net / İstanbul POS Ürün Yöneticisi</span>
-                <span className="text-[10px] font-semibold px-2 py-0.5 rounded bg-blue-100 text-blue-800">Hedef: APPLY</span>
-              </div>
-              <p className="text-xs text-slate-600 mt-1">
-                Türkiye içi hibrit, SoftPOS ve üye işyeri gereksinimi olan yerel ilan.
-              </p>
-            </div>
-          </div>
-        )}
 
         {/* Link Tab View */}
         {activeTab === "link" && (
@@ -325,7 +214,7 @@ Aranan Nitelikler:
                     setWorkModel("remote");
                   }
                 }}
-                placeholder="Örn: Senior Product Manager - Payments"
+                placeholder="Örn: Senior Product Manager"
                 className="w-full px-3 py-2 text-sm border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500"
               />
             </div>
@@ -469,8 +358,8 @@ Aranan Nitelikler:
             <div className="flex items-center gap-2">
               <Sparkles className="w-4 h-4 text-indigo-600" />
               <div>
-                <p className="text-xs font-bold text-indigo-950">Kaydederken AI Analizini Otomatik Başlat</p>
-                <p className="text-[11px] text-indigo-700/80">Türkiye uygunluğu, vize durumu ve eşleşme skorunu hemen üretir.</p>
+                <p className="text-xs font-bold text-indigo-950">Kaydederken Analizi Otomatik Başlat</p>
+                <p className="text-[11px] text-indigo-700/80">Konum uygunluğu, vize durumu ve profilinizle eşleşmeyi hemen üretir.</p>
               </div>
             </div>
             <input

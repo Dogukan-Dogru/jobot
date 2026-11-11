@@ -243,7 +243,7 @@ export const JobDetailModal: React.FC<JobDetailModalProps> = ({
                       {analysis.finalVerdict === "SKIP" && "🚫 BAŞVURU ÖNERİLMİYOR (SKIP)"}
                     </span>
                     <span className="text-[10px] px-2 py-0.2 rounded-full font-bold bg-white/70">
-                      Rol: {analysis.roleType}
+                      Rol: {{ PRODUCT: "Ürün", PROJECT: "Proje", HYBRID: "Ürün + Proje", OTHER: "Diğer" }[analysis.roleType] || analysis.roleType}
                     </span>
                   </div>
                   <p className="text-xs text-slate-700 mt-0.5 leading-relaxed font-medium">
@@ -388,7 +388,7 @@ export const JobDetailModal: React.FC<JobDetailModalProps> = ({
                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-3">
                   
                   <div className="p-3 rounded-lg bg-white border border-slate-200/80">
-                    <span className="text-[11px] text-slate-500 block">Türkiye'den Başvuru</span>
+                    <span className="text-[11px] text-slate-500 block">Konumunuzdan Başvuru</span>
                     <span className={`text-xs font-bold flex items-center gap-1 mt-0.5 ${
                       analysis.eligibility.canApplyFromTurkey === true ? "text-emerald-700" :
                       analysis.eligibility.canApplyFromTurkey === false ? "text-rose-700" : "text-amber-700"
@@ -401,7 +401,7 @@ export const JobDetailModal: React.FC<JobDetailModalProps> = ({
                   </div>
 
                   <div className="p-3 rounded-lg bg-white border border-slate-200/80">
-                    <span className="text-[11px] text-slate-500 block">Türkiye'den Remote</span>
+                    <span className="text-[11px] text-slate-500 block">Konumunuzdan Remote</span>
                     <span className={`text-xs font-bold flex items-center gap-1 mt-0.5 ${
                       analysis.eligibility.remoteFromTurkey === true ? "text-emerald-700" :
                       analysis.eligibility.remoteFromTurkey === false ? "text-rose-700" : "text-amber-700"
@@ -499,7 +499,9 @@ export const JobDetailModal: React.FC<JobDetailModalProps> = ({
               </div>
 
               {/* PRODUCT & PROJECT FIT */}
+              {(analysis.productFit.length > 0 || analysis.projectFit.length > 0) && (
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {analysis.productFit.length > 0 && (
                 <div className="p-4 rounded-xl border border-slate-200 bg-white">
                   <h4 className="text-xs font-bold text-slate-900 uppercase tracking-wider mb-2">
                     🎯 Ürün Yönetimi Uyumu (Product Fit)
@@ -510,7 +512,9 @@ export const JobDetailModal: React.FC<JobDetailModalProps> = ({
                     ))}
                   </ul>
                 </div>
+                )}
 
+                {analysis.projectFit.length > 0 && (
                 <div className="p-4 rounded-xl border border-slate-200 bg-white">
                   <h4 className="text-xs font-bold text-slate-900 uppercase tracking-wider mb-2">
                     🚀 Proje & Teslimat Uyumu (Project Fit)
@@ -521,7 +525,9 @@ export const JobDetailModal: React.FC<JobDetailModalProps> = ({
                     ))}
                   </ul>
                 </div>
+                )}
               </div>
+              )}
 
               {/* RED FLAGS & INTERVIEW RISKS */}
               {(analysis.redFlags.length > 0 || analysis.interviewRisks.length > 0) && (
@@ -574,7 +580,7 @@ export const JobDetailModal: React.FC<JobDetailModalProps> = ({
                   <FileText className="w-10 h-10 text-slate-400 mx-auto mb-3" />
                   <h3 className="text-sm font-bold text-slate-900">İlana Özel CV Henüz Üretilmedi</h3>
                   <p className="text-xs text-slate-500 max-w-sm mx-auto mt-1 mb-4">
-                    Yapay zeka, bu ilanın beklentilerine uygun olarak gerçek deneyiminizden PM ve Project Manager odaklı CV maddeleri üretsin.
+                    JoBot, bu ilanın beklentilerine uygun olarak profilinizdeki gerçek deneyimlerden CV maddeleri hazırlasın.
                   </p>
                   <button
                     onClick={handleGeneratePackageClick}
