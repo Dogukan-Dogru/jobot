@@ -193,15 +193,33 @@ export default function Home() {
 
   const handleReanalyze = async (id: string) => {
     if (!profile) return;
-    const target = jobs.find((j) => j.id === id);
+    let target = jobs.find((j) => j.id === id);
     if (!target) return;
+    // Kısa ilan kayıtları (ör. yalnızca başlık+şirket) için ilan metnini bağlantıdan çekmeyi dene
+    if (target.sourceUrl && (target.rawDescription || "").length < 400) {
+      try {
+        const res = await fetch("/api/fetch-job", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ url: target.sourceUrl })
+        });
+        const data = await res.json();
+        const fetched: string = data.suggestedDescription || "";
+        if (fetched.length > (target.rawDescription || "").length + 100) {
+          target = { ...target, rawDescription: fetched };
+        }
+      } catch {
+        // metin çekilemezse mevcut kayıtla devam et
+      }
+    }
     const analysis = await analyzeJobWithAI(target, profile, settings);
+    const rawDescription = target.rawDescription;
     setJobs((prevJobs) => {
-      const updated = prevJobs.map((j) => (j.id === id ? { ...j, analysis } : j));
+      const updated = prevJobs.map((j) => (j.id === id ? { ...j, rawDescription, analysis } : j));
       saveJobs(updated);
       return updated;
     });
-    setSelectedJob((prev) => (prev && prev.id === id ? { ...prev, analysis } : prev));
+    setSelectedJob((prev) => (prev && prev.id === id ? { ...prev, rawDescription, analysis } : prev));
   };
 
   const handleGeneratePackage = async (id: string) => {

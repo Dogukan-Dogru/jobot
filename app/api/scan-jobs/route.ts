@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { JobPosting, MasterProfile, AppSettings } from "@/types";
 import { runHeuristicAnalysis, parseGeoLocation, detectWorkModel } from "@/lib/aiService";
 import crypto from "crypto";
+import { fetchJobDescription, htmlToStructuredText } from "@/lib/jobDescription";
 import { buildSearchPlan, buildSourceQueries, isValidTargetRole as planAccepts, SearchPlan } from "@/lib/searchPlan";
 
 // Helper to strip HTML tags
@@ -219,7 +220,7 @@ export async function POST(req: NextRequest) {
             if (urlKey && seenUrls.has(urlKey)) continue;
             if (urlKey) seenUrls.add(urlKey);
 
-            const desc = stripHtml(item.description || "");
+            const desc = htmlToStructuredText(item.description || "");
             const { location, country } = parseGeoLocation(item.location);
             const salary = (item.salary_min && item.salary_max) 
               ? `$${Math.round(item.salary_min / 1000)}k - $${Math.round(item.salary_max / 1000)}k` 
@@ -284,7 +285,7 @@ export async function POST(req: NextRequest) {
                 if (urlKey && seenUrls.has(urlKey)) continue;
                 if (urlKey) seenUrls.add(urlKey);
 
-                const desc = stripHtml(item.jobDescription || item.jobExcerpt || "");
+                const desc = htmlToStructuredText(item.jobDescription || item.jobExcerpt || "");
                 const { location, country } = parseGeoLocation(item.jobGeo);
 
                 const newJob: JobPosting = {
@@ -339,7 +340,7 @@ export async function POST(req: NextRequest) {
                 if (urlKey && seenUrls.has(urlKey)) continue;
                 if (urlKey) seenUrls.add(urlKey);
 
-                const desc = stripHtml(item.description || "");
+                const desc = htmlToStructuredText(item.description || "");
                 const { location, country } = parseGeoLocation(item.candidate_required_location);
 
                 const newJob: JobPosting = {
@@ -377,6 +378,33 @@ export async function POST(req: NextRequest) {
 
     // Execute all sources concurrently
     await Promise.allSettled(tasks);
+
+    // İlan metni zenginleştirme: LinkedIn/Kariyer.net kayıtları yalnızca başlık+şirket içerir.
+    // Elenmemiş ilanların tam metnini çekip gereksinim karşılaştırmasını (eksik beceri, deneyim yılı, sertifika, dil) yeniden çalıştır.
+    const needsDetail = fetchedJobs
+      .filter(
+        (j) =>
+          j.sourceUrl &&
+          (j.rawDescription || "").length < 400 &&
+          j.analysis?.finalVerdict !== "SKIP" &&
+          (j.platform === "linkedin" || j.platform === "kariyer")
+      )
+      .slice(0, 20);
+    const queue = [...needsDetail];
+    const deadline = Date.now() + 18000;
+    const worker = async () => {
+      while (queue.length && Date.now() < deadline) {
+        const j = queue.shift();
+        if (!j || !j.sourceUrl) continue;
+        const text = await fetchJobDescription(j.sourceUrl, 4000);
+        if (text.length > 200) {
+          j.rawDescription = text;
+          j.analysis = runHeuristicAnalysis(j, profile);
+          j.status = j.analysis.finalVerdict === "APPLY" ? "to_apply" : "new";
+        }
+      }
+    };
+    await Promise.allSettled(Array.from({ length: 5 }, worker));
 
     // Sort with APPLY first, then CONSIDER, then SKIP (including country-locked ones) at the very bottom.
     // Within the same verdict, push jobs ineligible from Turkey (canApplyFromTurkey === false) after others.

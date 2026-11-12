@@ -1,6 +1,8 @@
 import { AppSettings, ApplicationPackage, JobAnalysis, JobPosting, MasterProfile } from "@/types";
 import { buildSearchPlan, homeCountryOf, isValidTargetRole as planAccepts } from "@/lib/searchPlan";
-import { SKILL_DICTIONARY } from "@/lib/cvParser";
+import { assessRequirements } from "@/lib/jobRequirements";
+import { buildInterviewRisks } from "@/lib/interviewPrep";
+import { verifyWorldwideRemote } from "@/lib/remoteVerification";
 import { countryMatchesTargets, detectCountry } from "@/lib/geo";
 
 // The master prompt matching the ChatGPT specifications
@@ -579,29 +581,25 @@ export function runHeuristicAnalysis(job: JobPosting, profile: MasterProfile): J
     /\b(hybrid|hibrit|onsite|on-site)\b/i.test(job.location) ||
     /\b(days? (?:in|a|per) (?:the )?office|office-based|in-office|office attendance)\b/i.test(text);
 
-  // Worldwide Remote check: ONLY valid if not locked to a specific country AND not hybrid/onsite
-  const hasWorldwideInGeo = 
-    !isCountryLocked &&
-    !isHybridOrOnsite &&
-    (effectiveCountry.toLowerCase() === "worldwide remote" ||
-    locLower === "worldwide remote" ||
-    locLower === "global remote");
-
-  const hasWorldwideInText =
-    !isCountryLocked &&
-    !isSpecificForeignCountry &&
-    !isHybridOrOnsite &&
-    (
-      text.includes("work from anywhere") ||
-      text.includes("remote worldwide") ||
-      text.includes("remote - worldwide") ||
-      text.includes("worldwide remote") ||
-      text.includes("anywhere in the world") ||
-      /\bdeel\b/i.test(text) ||
-      /\b(eor|employer of record)\b/i.test(text)
-    );
-
-  const isWorldwideRemote = !isCountryLocked && !isHybridOrOnsite && (hasWorldwideInGeo || hasWorldwideInText);
+  // Worldwide remote doğrulaması: etiket yetmez; metindeki açık kanıt ve kısıtlar ayrı ayrı değerlendirilir
+  const remoteCheck = verifyWorldwideRemote({
+    title: job.title,
+    location: effectiveLocation,
+    country: effectiveCountry,
+    description: job.rawDescription || "",
+    workModel: job.workModel,
+    home: homeRaw,
+    hybridOrOnsite: isHybridOrOnsite,
+    sponsorshipOffered: hasSponsorship
+  });
+  // Metindeki ek kısıtlar (çalışma izni, ikamet, bölge) ülke kilidi gibi ele alınır
+  if (!isHomeJob && !hasSponsorship && !isCountryLocked && remoteCheck.status === "restricted") {
+    isCountryLocked = true;
+    lockedReason = remoteCheck.restrictions[0];
+  }
+  const isWorldwideRemote = !isCountryLocked && !isHybridOrOnsite && remoteCheck.status === "confirmed";
+  // Yalnızca etiket "worldwide" diyor, metin doğrulamıyor
+  const remoteUnproven = !isCountryLocked && !isHybridOrOnsite && remoteCheck.status === "likely";
 
   let canApplyFromTurkey: boolean | "unclear" = "unclear";
   let remoteFromTurkey: boolean | "unclear" = "unclear";
@@ -648,13 +646,18 @@ export function runHeuristicAnalysis(job: JobPosting, profile: MasterProfile): J
     canApplyFromTurkey = true;
     remoteFromTurkey = true;
     visaSponsorship = "unclear";
-    eligibilitySummary = `Global / Worldwide remote ve EOR desteği mevcut; ${home} konumundan çalışılabilir.`;
+    eligibilitySummary = `Worldwide remote doğrulandı: ${remoteCheck.evidence[0]}. ${home} konumundan çalışılabilir görünüyor.`;
+  } else if (remoteUnproven) {
+    canApplyFromTurkey = "unclear";
+    remoteFromTurkey = "unclear";
+    visaSponsorship = "unclear";
+    eligibilitySummary = remoteCheck.summary;
   } else {
     // Overseas job without confirmed worldwide remote and without sponsorship
     canApplyFromTurkey = false;
     remoteFromTurkey = false;
     visaSponsorship = "not_offered";
-    eligibilitySummary = `İlan yurtdışı merkezli olup ${home} konumundan başvuru için vize sponsorluğu veya relokasyon desteği belirtilmemiştir. Vize sponsoru bulunmadığından ${home} konumundan başvuruya uygun değildir.`;
+    eligibilitySummary = `İlan yurtdışı merkezli olup ${home} konumundan başvuru için vize sponsorluğu veya relokasyon desteği belirtilmemiştir. ${remoteCheck.status === "unverified" ? remoteCheck.summary + " " : ""}Çalışabileceğiniz kanıtlanamadığından ${home} konumundan başvuruya uygun değildir.`;
   }
 
   // 3. Profil ile ilan eşleşmesi (tamamen profildeki verilerden; sabit alan/sektör varsayımı yok)
@@ -678,15 +681,16 @@ export function runHeuristicAnalysis(job: JobPosting, profile: MasterProfile): J
   const matchedSkills = profileSkills.filter((sk) => hasTerm(text, sk)).slice(0, 6);
   for (const sk of matchedSkills) strongMatches.push(`${sk} deneyimi (ilanda geçiyor)`);
 
-  // İlanda geçen ama profilinizde bulunmayan bilinen beceri/araçlar (eksik gereksinimler)
-  const profileSkillsLc = profileSkills.map((x) => x.toLowerCase());
-  const descLc = (job.rawDescription || "").toLowerCase();
-  const missingSkills = SKILL_DICTIONARY.filter(
-    (sk) =>
-      hasTerm(descLc, sk) &&
-      !profileSkillsLc.some((ps) => ps === sk.toLowerCase() || ps.includes(sk.toLowerCase()) || sk.toLowerCase().includes(ps))
-  ).slice(0, 6);
-  for (const sk of missingSkills) gaps.push(`${sk}: ilanda geçiyor, profilinizde belirtilmemiş`);
+  // İlan gereksinimleri (beceri, deneyim yılı, sertifika, dil) ile profil karşılaştırması
+  const report = assessRequirements(job.rawDescription || "", profile);
+  const levelTr = (lvl: "required" | "preferred") => (lvl === "required" ? "zorunlu" : "tercih edilen");
+  for (const r of report.matched.slice(0, 8)) {
+    if (!strongMatches.some((m) => m.toLowerCase().startsWith(r.label.toLowerCase()))) {
+      strongMatches.push(`${r.label} (${levelTr(r.level)}) — profilinizde var`);
+    }
+  }
+  for (const r of report.missingRequired) gaps.push(r.detail || `${r.label}: ilanda zorunlu görünüyor, profilinizde belirtilmemiş`);
+  for (const r of report.missingPreferred.slice(0, 5)) gaps.push(`${r.label}: ilanda tercih edilen, profilinizde belirtilmemiş`);
 
   // Aktarılabilir deneyim: ilan metniyle en çok örtüşen profil maddeleri
   const jobWordSet = new Set(text.split(/[^a-zçğıöşü0-9+#.]+/i).filter((w) => w.length > 3));
@@ -698,6 +702,12 @@ export function runHeuristicAnalysis(job: JobPosting, profile: MasterProfile): J
   for (const x of rankedHighlights.slice(0, 3)) transferableExperience.push(x.h);
 
   // Red flags
+  if (remoteUnproven) {
+    redFlags.push("Worldwide remote kanıtlanamadı: yalnızca konum etiketi worldwide diyor, ilan metninde açık ifade yok");
+  }
+  if (!isHomeJob && (remoteCheck.status === "confirmed" || remoteCheck.status === "likely")) {
+    for (const c of remoteCheck.cautions.slice(0, 2)) redFlags.push(`Dikkat: ${c}`);
+  }
   if (!isHomeJob && isHybridOrOnsite && !hasSponsorship) {
     redFlags.push(`Yurtdışı ofiste ${job.workModel === "onsite" ? "fiziki/ofis" : "hibrit"} katılım şartı (Vize/relokasyon desteği yok)`);
   }
@@ -715,7 +725,6 @@ export function runHeuristicAnalysis(job: JobPosting, profile: MasterProfile): J
   }
   if (profile.yearsOfExperience < 7 && (text.includes("7+ years") || text.includes("8+ years") || text.includes("10+ years") || text.includes("director"))) {
     redFlags.push("Yüksek kıdem seviyesi gereksinimi (7+ yıl)");
-    gaps.push(`Beklenen kıdem yılı (Aday ${profile.yearsOfExperience}+ yıl)`);
   }
 
   // Final Verdict determination
@@ -728,12 +737,15 @@ export function runHeuristicAnalysis(job: JobPosting, profile: MasterProfile): J
   } else if (isCountryLocked) {
     finalVerdict = "SKIP";
     oneSentenceReason = `İlan uzaktan çalışma (remote) görünse de yalnızca ilgili ülkede yerel ikamet edenleri kabul ediyor (${lockedReason}); ${home} konumundan başvuruya kapalıdır.`;
-  } else if (!isHomeJob && !isWorldwideRemote && !hasSponsorship) {
+  } else if (!isHomeJob && !isWorldwideRemote && !remoteUnproven && !hasSponsorship) {
     finalVerdict = "SKIP";
     oneSentenceReason = `Yurtdışı pozisyon için vize sponsorluğu veya relokasyon desteği belirtilmemiştir; ${home} konumundan çalışma izni/vize olmadan başvuru yapılamaz.`;
   } else if (hasNoSponsorship && !isHomeJob && !isWorldwideRemote) {
     finalVerdict = "SKIP";
     oneSentenceReason = "Teknik gereksinimler uygun olsa da vize sponsorluğu verilmiyor ve yerel çalışma izni zorunlu tutuluyor.";
+  } else if (remoteUnproven) {
+    finalVerdict = "CONSIDER";
+    oneSentenceReason = `Worldwide remote doğrulanamadı: etiket "worldwide" diyor ama ilan metni bunu kanıtlamıyor. Başvurmadan önce ${home} konumundan çalışılabildiğini işverenden teyit edin.`;
   } else if (strongMatches.length >= 2 && canApplyFromTurkey === true) {
     finalVerdict = "APPLY";
     oneSentenceReason = `İlandaki temel gereksinimler (${strongMatches[0] || "hedef rol"}) profilinizle güçlü şekilde örtüşüyor.`;
@@ -775,6 +787,26 @@ export function runHeuristicAnalysis(job: JobPosting, profile: MasterProfile): J
     }
   }
 
+  // 5. Gereksinim karşılaştırması: kritik eksik ve düşük eşleşme skoru kararı etkiler
+  const matchScore = report.score;
+  const assessableCount = report.requirements.filter((r) => r.met !== "unknown").length;
+  if (report.criticalMissing.length > 0) {
+    const names = report.criticalMissing.map((r) => r.label).join(", ");
+    redFlags.push(`Kritik gereksinim eksik: ${names}`);
+    if (finalVerdict !== "SKIP") {
+      finalVerdict = "SKIP";
+      oneSentenceReason = `İlanın kritik gereksinimi karşılanmıyor: ${names}.`;
+    }
+  } else if (report.assessed && matchScore !== null) {
+    if (matchScore < 40 && assessableCount >= 3 && finalVerdict !== "SKIP") {
+      finalVerdict = "SKIP";
+      oneSentenceReason = `İlan gereksinimlerinin yalnızca %${matchScore}'i profilinizle karşılanıyor.`;
+    } else if (matchScore < 60 && finalVerdict === "APPLY") {
+      finalVerdict = "CONSIDER";
+      oneSentenceReason = `İlan gereksinimlerinin %${matchScore}'i profilinizle karşılanıyor; eksikleri gözden geçirip karar verin.`;
+    }
+  }
+
   return {
     roleType,
     eligibility: {
@@ -793,14 +825,13 @@ export function runHeuristicAnalysis(job: JobPosting, profile: MasterProfile): J
       ? rankedHighlights.slice(0, 3).map((x) => (x.company ? `${x.company}: ${x.h}` : x.h))
       : profile.coreExperience.slice(0, 2).map((e) => `${e.title}${e.company ? " — " + e.company : ""}`.trim()).filter(Boolean),
     redFlags,
-    interviewRisks: missingSkills.slice(0, 3).map((sk) => ({
-      requirement: `${sk} bilgisi/deneyimi`,
-      candidateExperience: "Profilinizde bu beceri belirtilmemiş",
-      gap: `İlan ${sk} gerektiriyor; profilinizde doğrudan karşılığı görünmüyor`,
-      honestStrategy: `Doğrudan deneyiminiz yoksa bunu açıkça söyleyin; benzer bir araç/yaklaşımla elde ettiğiniz somut bir sonucu örnekleyip ${sk} için öğrenme planınızı belirtin.`
-    })),
+    interviewRisks: buildInterviewRisks(report, profile, { title: job.title, company: job.company, rawDescription: job.rawDescription || "" }),
     finalVerdict,
     oneSentenceReason,
+    remoteVerification: remoteCheck.status === "not_remote" && !isHybridOrOnsite && job.workModel !== "remote" ? undefined : remoteCheck,
+    matchScore: matchScore ?? undefined,
+    requirementsAssessed: report.assessed,
+    requirements: report.requirements.map((r) => ({ kind: r.kind, label: r.label, level: r.level, met: r.met, critical: r.critical, detail: r.detail })),
     analyzedAt: new Date().toISOString()
   };
 }

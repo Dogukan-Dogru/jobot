@@ -423,6 +423,11 @@ export const LiveScannerModal: React.FC<LiveScannerModalProps> = ({
                       <span className="text-[10px] font-semibold px-2 py-0.5 rounded bg-slate-100 dark:bg-slate-700 text-slate-700 dark:text-slate-300">
                         {job.workModel.toUpperCase()}
                       </span>
+                      {typeof job.analysis?.matchScore === "number" && (
+                        <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-indigo-50 dark:bg-indigo-950/50 text-indigo-700 dark:text-indigo-300">
+                          Eşleşme %{job.analysis.matchScore}
+                        </span>
+                      )}
                       {job.salary && (
                         <span className="text-[10px] font-semibold px-2 py-0.5 rounded bg-emerald-50 dark:bg-emerald-950/50 text-emerald-700 dark:text-emerald-300">
                           {job.salary}

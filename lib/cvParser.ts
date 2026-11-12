@@ -53,7 +53,10 @@ export const SKILL_DICTIONARY = [
   "REST", "REST API", "GraphQL", "API", "SDK", "Webhooks", "Microservices", "Python", "JavaScript", "TypeScript", "Java", "Kotlin", "Swift", "React", "Node.js",
   "AWS", "Azure", "GCP", "Docker", "Kubernetes", "Git", "CI/CD", "Android", "iOS", "Shopify", "WordPress", "SEO", "SaaS", "B2B", "B2C", "D2C",
   // domain
-  "Fintech", "Payments", "SoftPOS", "HCE", "EMV", "EMVCo", "Mastercard", "Visa", "E-commerce", "Marketplace", "Healthcare", "Telecom", "Logistics", "Banking", "Insurance"
+  "Fintech", "Payments", "SoftPOS", "HCE", "EMV", "EMVCo", "Mastercard", "Visa", "E-commerce", "Marketplace", "Healthcare", "Telecom", "Logistics", "Banking", "Insurance",
+  // ek teknoloji / araçlar
+  "C#", ".NET", "Spring Boot", "Golang", "Rust", "PHP", "Ruby", "Rails", "Django", "Flask", "Vue", "Angular", "Next.js", "PostgreSQL", "MySQL", "MongoDB", "Redis", "Kafka",
+  "Terraform", "Salesforce", "HubSpot", "SAP", "PowerPoint", "Photoshop", "Sketch", "Zendesk", "Intercom", "Stripe", "Machine Learning", "Data Analysis"
 ];
 
 // ---------------------------------------------------------------------------

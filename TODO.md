@@ -84,29 +84,40 @@ Parser **tamamen kural tabanlıdır; Gemini/AI şimdilik hiç karışmaz.** Kims
 - [ ] Açık kalan: ülke tespiti sözlük tabanlı (~27 ülke); sözlükte olmayan ülkeler/şehirler tespit edilemez ve hedef kontrolüne takılmaz. Sözlük genişletilebilir.
 - [ ] Açık kalan: Kanban/tablo rozetleri ve `canApplyFromTurkey` alan adı hâlâ "Turkey" (madde 6).
 
-## 3. İlan–CV eksiklik tespiti
+## 3. İlan–CV eksiklik tespiti — TAMAMLANDI
 
-- Sorun: İlan ile CV arasındaki eksikler belirlenemiyor, bu yüzden eşleşmeyen ilanlar öneriliyor.
-- İlandan zorunlu/tercih edilen gereksinimleri (beceri, araç, deneyim yılı, sektör, sertifika) çıkar; profille karşılaştır.
-- Çıktı: eşleşenler, **eksik gereksinimler**, aktarılabilir deneyimler; eksik sayısı/ağırlığı skoru düşürür.
-- Kritik gereksinim (ör. zorunlu deneyim yılı, zorunlu sertifika) eksikse `SKIP`/düşük skor.
-- Profil dinamik olacağı için (madde 1) karşılaştırma sabit aday metnine değil kullanıcının profiline dayanmalı.
+- [x] İlan metninden gereksinim çıkarımı (`lib/jobRequirements.ts`): beceri/araç, deneyim yılı, sertifika (PMP, Scrum, AWS…), dil (Almanca vb.). Bölümler (Requirements / Nice to have / Responsibilities / Benefits) ayrıştırılır; zorunlu ve tercih edilen ayrılır, yan haklar yok sayılır.
+- [x] Profille karşılaştırma: eşleşen / eksik zorunlu / eksik tercih edilen / kritik eksik; ağırlıklı **eşleşme skoru (%)**.
+- [x] Karar: kritik eksik (≥2 yıl deneyim farkı, zorunlu sertifika, zorunlu dil) → `SKIP`; skor <%40 → `SKIP`; <%60 iken `APPLY` → `CONSIDER`.
+- [x] Detay penceresinde "İlan Gereksinimleri & Profil Karşılaştırması" paneli (✓/✗, zorunlu/tercih, KRİTİK etiketi), tarama listesinde "Eşleşme %".
+- [x] Kısa ilanlar: LinkedIn/Kariyer.net kayıtları yalnızca başlık+şirket içerdiği için tarama sonrası elenmemiş ilanların tam metni bağlantıdan çekilir (`lib/jobDescription.ts`); "Yeniden Analiz" de metni çeker. Metin yoksa panel "gereksinim çıkarılamadı" der.
+- [x] Mülakat riskleri artık eksik zorunlu gereksinimlerden üretilir (madde 4'te derinleştirilecek).
+- [ ] Açık kalan: eğitim (lisans/yüksek lisans) gereksinimi karşılaştırılmıyor; profilde eğitim alanı yok.
+- [ ] Açık kalan: beceri sözlüğü sınırlı (~120 terim); sözlük dışı beceriler gereksinim olarak yakalanmaz. Sözlük/alan genişletilebilir.
+- [ ] Açık kalan: LinkedIn ilan metni çekimi sıklıkla hız sınırına takılabilir; çekilemeyen ilanlar "değerlendirilemedi" kalır.
 
-## 4. "Mülakatta challenge edilebilecek alanlar & dürüst strateji" bölümü
+## 4. "Mülakatta challenge edilebilecek alanlar & dürüst strateji" bölümü — TAMAMLANDI
 
-- Şu an yeterince detaylı değil.
-- Her risk için: ilanın hangi gereksinimi → profilde neden zayıf kalıyor → mülakatçının muhtemel sorusu → dürüst ve stratejik örnek cevap → destekleyen somut deneyim/rakam.
-- Risk kaynağı madde 3'teki eksik/zayıf eşleşmeler olacak (maddeler birbirine bağlı).
-- Her risk için öncelik/seviye (yüksek/orta/düşük).
+- [x] Her risk için: ilan gereksinimi → profilde neden zayıf → **muhtemel soru** → **dürüst yaklaşım adımları** → profildeki **gerçek destekleyici deneyimler** → **örnek cevap taslağı** (`lib/interviewPrep.ts`).
+- [x] Risk kaynağı madde 3'teki eksik gereksinimler: deneyim yılı farkı, sertifika, dil, beceri/araç (benzer araç deneyimi üzerinden köprü kurar, ör. Tableau eksikse SQL/Power BI).
+- [x] Risk seviyesi (yüksek / orta / düşük); en fazla 6 risk, önem sırasıyla.
+- [x] Profil düzeyi risk: başarı maddelerinde rakam yoksa "etkiyi ölçülebilir anlatın" uyarısı.
+- [x] Soru ve cevap taslağı ilan dilinde (Türkçe ilan → Türkçe, aksi halde İngilizce); örnek cevaplar yalnızca profildeki bilgilerle kurulur, uydurma deneyim eklenmez. Arayüzde bunu belirten uyarı var.
+- [ ] Açık kalan: davranışsal/genel mülakat soruları (zayıf yönler, ayrılma nedeni, maaş beklentisi) henüz yok; yalnızca ilana özel eksikler işleniyor.
+- [ ] Açık kalan: örnek cevaplar şablon tabanlı; uzun ve çok eksikli ilanlarda tekrar eden ifadeler olabilir.
 
-## 5. Worldwide remote tespiti
+## 5. Worldwide remote tespiti — TAMAMLANDI
 
-- Şu an iyi çalışmıyor; geri bildirim geldi ama kanıtlanamadı.
-- Ekstra kontrol katmanı düşün: metinde ülke/zaman dilimi/ikamet kısıtı, "EOR/Deel/contractor" ibaresi, şirketin kayıtlı ülkesi, "authorized to work in..." ifadeleri.
-- Kesin kanıt yoksa "Worldwide Remote" etiketi yerine **"doğrulanamadı"** durumu göster; kullanıcıya belirsizlik açıkça söylenir.
-- Gerçek ilanlardan test seti (doğru/yanlış pozitifler) toplayıp kuralları bununla doğrula.
-
----
+- [x] Doğrulama katmanı (`lib/remoteVerification.ts`): ilan sitesinin "Worldwide" etiketine tek başına güvenilmez. Durumlar: **doğrulandı** (metinde açık kanıt, kısıt yok), **doğrulanamadı / yalnızca etiket** (`likely`), **kapsam belirsiz** (düz "Remote"), **kısıtlı**, hibrit/ofis.
+- [x] Kanıt: "work from anywhere", "anywhere in the world", küresel işe alım ("hire globally / 40 countries"), EOR/Deel/Remote.com vb., "adaylar her yerden kabul", aday ülkesinin açıkça kabulü ("Candidates from Turkey are welcome").
+- [x] Kısıt: çalışma izni ("authorized to work in …"), ikamet ("must reside in …", "residents of …"), "Remote within EU / US only / UK-based", konum alanındaki ülke/bölge, ABD vatandaşlığı/clearance. Kısıtın adayın ülkesini kapsayıp kapsamadığı kontrol edilir (ör. Almanya'daki aday için "EU only" kısıt sayılmaz; vize sponsorluğu varsa çalışma izni şartı kısıt sayılmaz).
+- [x] Yumuşak uyarılar: saat dilimi beklentisi (PST/EST/CET overlap, UTC aralığı), bağımsız yüklenici (contractor) modeli.
+- [x] Karar: `doğrulandı` → uygun; `yalnızca etiket` → `canApply: unclear` ve en fazla `CONSIDER` ("işverene sorun" uyarısıyla); `kısıtlı` → ülke kilidi gibi `SKIP`; düz remote (kapsam belirsiz) → eskisi gibi `SKIP` (kanıt yok).
+- [x] Detay penceresinde "Worldwide Remote Doğrulaması" kutusu: durum etiketi, kanıtlar (✓), kısıtlar (✗), uyarılar (⚠).
+- [x] 18 senaryoluk test seti çalıştırıldı (kanıt/kısıt/etiket/sponsorluk/aday ülkesi varyasyonları). Gerçek taramada çıkan yanlış pozitif ("work from anywhere in your home country" kısıt, kanıt değil) düzeltilip teste eklendi.
+- [ ] Açık kalan: şirketin kayıtlı ülkesi sinyali kullanılmıyor (ilan metninde/etikette yok).
+- [ ] Açık kalan: kural tabanlı olduğu için serbest dilli kısıtlar (ör. "we can only hire in countries where we have an entity") yakalanmayabilir. Gerçek ilanlardan yanlış pozitif/negatif topladıkça kural seti genişletilmeli.
+- [ ] Açık kalan: yalnızca İngilizce ifadeler; Türkçe/diğer dillerdeki ilanlar için kalıplar eklenmedi.
 
 ## 6. Meslek bazlı değerlendirme bölümü (Product Fit / Project Fit yerine)
 

@@ -439,6 +439,45 @@ export const JobDetailModal: React.FC<JobDetailModalProps> = ({
                 <p className="text-xs text-slate-700 bg-white/70 p-2.5 rounded-lg border border-slate-200/60 leading-relaxed font-medium">
                   <strong>Özet:</strong> {analysis.eligibility.summary}
                 </p>
+
+                {analysis.remoteVerification && analysis.remoteVerification.status !== "not_remote" && (
+                  <div className="mt-3 p-3 rounded-lg bg-white border border-slate-200/80 space-y-2">
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <span className="text-[11px] font-bold text-slate-700 uppercase tracking-wider">Worldwide Remote Doğrulaması</span>
+                      <span className={`text-[10px] font-extrabold px-2 py-0.5 rounded border ${
+                        analysis.remoteVerification.status === "confirmed" ? "bg-emerald-100 text-emerald-800 border-emerald-200" :
+                        analysis.remoteVerification.status === "restricted" ? "bg-rose-100 text-rose-800 border-rose-200" :
+                        "bg-amber-100 text-amber-800 border-amber-200"
+                      }`}>
+                        {analysis.remoteVerification.status === "confirmed" ? "DOĞRULANDI" :
+                         analysis.remoteVerification.status === "restricted" ? "KISITLI" :
+                         analysis.remoteVerification.status === "likely" ? "DOĞRULANAMADI (YALNIZCA ETİKET)" : "KAPSAM BELİRSİZ"}
+                      </span>
+                    </div>
+                    <p className="text-xs text-slate-600 leading-relaxed">{analysis.remoteVerification.summary}</p>
+                    {analysis.remoteVerification.evidence.length > 0 && (
+                      <ul className="text-[11px] text-emerald-800 space-y-0.5">
+                        {analysis.remoteVerification.evidence.map((e, i) => (
+                          <li key={i}>✓ {e}</li>
+                        ))}
+                      </ul>
+                    )}
+                    {analysis.remoteVerification.restrictions.length > 0 && (
+                      <ul className="text-[11px] text-rose-800 space-y-0.5">
+                        {analysis.remoteVerification.restrictions.map((e, i) => (
+                          <li key={i}>✗ {e}</li>
+                        ))}
+                      </ul>
+                    )}
+                    {analysis.remoteVerification.cautions.length > 0 && (
+                      <ul className="text-[11px] text-amber-800 space-y-0.5">
+                        {analysis.remoteVerification.cautions.map((e, i) => (
+                          <li key={i}>⚠ {e}</li>
+                        ))}
+                      </ul>
+                    )}
+                  </div>
+                )}
               </div>
 
               {/* MATCHES, TRANSFERABLE, GAPS */}
@@ -498,6 +537,51 @@ export const JobDetailModal: React.FC<JobDetailModalProps> = ({
 
               </div>
 
+              {/* REQUIREMENTS vs PROFILE */}
+              <div className="rounded-xl border border-slate-200 dark:border-slate-700 bg-white p-4">
+                <div className="flex flex-wrap items-center justify-between gap-2 mb-3">
+                  <h4 className="text-xs font-bold text-slate-900 uppercase tracking-wider">
+                    📋 İlan Gereksinimleri & Profil Karşılaştırması
+                  </h4>
+                  {analysis.requirementsAssessed && typeof analysis.matchScore === "number" && (
+                    <span className={`text-xs font-extrabold px-2.5 py-0.5 rounded-md border ${
+                      analysis.matchScore >= 70 ? "bg-emerald-100 text-emerald-800 border-emerald-200" :
+                      analysis.matchScore >= 40 ? "bg-amber-100 text-amber-800 border-amber-200" :
+                      "bg-rose-100 text-rose-800 border-rose-200"
+                    }`}>
+                      Eşleşme: %{analysis.matchScore}
+                    </span>
+                  )}
+                </div>
+
+                {!analysis.requirementsAssessed || !analysis.requirements || analysis.requirements.length === 0 ? (
+                  <p className="text-xs text-slate-600 leading-relaxed">
+                    Bu ilanın metni gereksinim çıkarmak için yeterli değil (yalnızca başlık/şirket bilgisi olabilir), bu yüzden eksikleriniz tespit edilemedi.
+                    İlan metnini panoya yapıştırarak veya &quot;Yeniden Analiz&quot; ile bağlantıdan çekerek tekrar deneyin.
+                  </p>
+                ) : (
+                  <ul className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-1.5 text-xs">
+                    {[...analysis.requirements]
+                      .sort((a, b) => Number(b.critical) - Number(a.critical) || (a.level === b.level ? 0 : a.level === "required" ? -1 : 1))
+                      .map((r, i) => (
+                        <li key={i} className="flex items-start gap-1.5 leading-relaxed">
+                          <span className={`font-bold shrink-0 ${r.met === true ? "text-emerald-600" : r.met === false ? "text-rose-600" : "text-slate-400"}`}>
+                            {r.met === true ? "✓" : r.met === false ? "✗" : "?"}
+                          </span>
+                          <span className="text-slate-800">
+                            {r.label}
+                            <span className="text-slate-500"> · {r.level === "required" ? "zorunlu" : "tercih"}</span>
+                            {r.critical && r.met === false && (
+                              <span className="ml-1.5 text-[10px] font-bold px-1.5 py-0.5 rounded bg-rose-100 text-rose-700">KRİTİK</span>
+                            )}
+                            {r.detail && <span className="block text-[11px] text-slate-500">{r.detail}</span>}
+                          </span>
+                        </li>
+                      ))}
+                  </ul>
+                )}
+              </div>
+
               {/* PRODUCT & PROJECT FIT */}
               {(analysis.productFit.length > 0 || analysis.projectFit.length > 0) && (
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -552,15 +636,62 @@ export const JobDetailModal: React.FC<JobDetailModalProps> = ({
                         <HelpCircle className="w-4 h-4 text-indigo-600" />
                         <span>Mülakatta Challenge Edilebilecek Alanlar & Dürüst Strateji</span>
                       </h4>
+                      <p className="text-[11px] text-slate-500 mb-3 leading-relaxed">
+                        Aşağıdaki örnek cevaplar profilinizdeki bilgilerden üretilmiş taslaklardır. Yalnızca gerçekten yaşadığınız deneyimleri anlatın; eksik olanı olduğu gibi söyleyin.
+                      </p>
                       <div className="space-y-3">
                         {analysis.interviewRisks.map((risk, idx) => (
-                          <div key={idx} className="p-3 rounded-lg bg-slate-50 border border-slate-200/70 text-xs space-y-1">
-                            <p className="font-bold text-slate-900">Gereksinim: {risk.requirement}</p>
-                            <p className="text-slate-600"><strong>Aday Deneyimi:</strong> {risk.candidateExperience}</p>
+                          <div key={idx} className="p-3 rounded-lg bg-slate-50 border border-slate-200/70 text-xs space-y-2">
+                            <div className="flex flex-wrap items-center justify-between gap-2">
+                              <p className="font-bold text-slate-900">{risk.requirement}</p>
+                              {risk.severity && (
+                                <span className={`text-[10px] font-extrabold px-2 py-0.5 rounded border ${
+                                  risk.severity === "high" ? "bg-rose-100 text-rose-800 border-rose-200" :
+                                  risk.severity === "medium" ? "bg-amber-100 text-amber-800 border-amber-200" :
+                                  "bg-slate-100 text-slate-600 border-slate-200"
+                                }`}>
+                                  {risk.severity === "high" ? "YÜKSEK RİSK" : risk.severity === "medium" ? "ORTA RİSK" : "DÜŞÜK RİSK"}
+                                </span>
+                              )}
+                            </div>
+                            <p className="text-slate-600"><strong>Profilinizde:</strong> {risk.candidateExperience}</p>
                             <p className="text-amber-800"><strong>Eksik Nokta:</strong> {risk.gap}</p>
-                            <p className="text-indigo-900 bg-indigo-50/80 p-2 rounded border border-indigo-100 font-medium mt-1">
-                              💡 <strong>Dürüst Yanıt Stratejisi:</strong> {risk.honestStrategy}
-                            </p>
+
+                            {risk.likelyQuestion && (
+                              <p className="text-slate-900 bg-white p-2 rounded border border-slate-200">
+                                ❓ <strong>Muhtemel soru:</strong> <em>{risk.likelyQuestion}</em>
+                              </p>
+                            )}
+
+                            <div className="text-indigo-900 bg-indigo-50/80 p-2 rounded border border-indigo-100">
+                              <p className="font-bold mb-1">💡 Dürüst Yanıt Stratejisi</p>
+                              {risk.strategySteps && risk.strategySteps.length > 0 ? (
+                                <ol className="list-decimal pl-4 space-y-0.5 font-medium">
+                                  {risk.strategySteps.map((st, i) => (
+                                    <li key={i}>{st}</li>
+                                  ))}
+                                </ol>
+                              ) : (
+                                <p className="font-medium">{risk.honestStrategy}</p>
+                              )}
+                            </div>
+
+                            {risk.supportingEvidence && risk.supportingEvidence.length > 0 && (
+                              <div className="text-emerald-900 bg-emerald-50/70 p-2 rounded border border-emerald-100">
+                                <p className="font-bold mb-1">✅ Destekleyebileceğiniz gerçek deneyimleriniz</p>
+                                <ul className="space-y-0.5">
+                                  {risk.supportingEvidence.map((ev, i) => (
+                                    <li key={i}>• {ev}</li>
+                                  ))}
+                                </ul>
+                              </div>
+                            )}
+
+                            {risk.sampleAnswer && (
+                              <p className="text-slate-700 bg-white p-2 rounded border border-dashed border-slate-300">
+                                🗣️ <strong>Örnek cevap taslağı:</strong> {risk.sampleAnswer}
+                              </p>
+                            )}
                           </div>
                         ))}
                       </div>

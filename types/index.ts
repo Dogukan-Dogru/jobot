@@ -25,6 +25,16 @@ export interface InterviewRisk {
   candidateExperience: string;
   gap: string;
   honestStrategy: string;
+  /** Risk seviyesi: yüksek (kritik/zorunlu eksik), orta, düşük */
+  severity?: 'high' | 'medium' | 'low';
+  /** Mülakatçının muhtemel sorusu */
+  likelyQuestion?: string;
+  /** Profildeki gerçek bilgilerden üretilen örnek cevap taslağı */
+  sampleAnswer?: string;
+  /** Dürüst cevap için adım adım yaklaşım */
+  strategySteps?: string[];
+  /** Profilinizdeki destekleyici gerçek deneyim maddeleri */
+  supportingEvidence?: string[];
 }
 
 export interface JobAnalysis {
@@ -40,6 +50,26 @@ export interface JobAnalysis {
   interviewRisks: InterviewRisk[];
   finalVerdict: FinalVerdict;
   oneSentenceReason: string;
+  /** İlan gereksinimlerinin profille karşılanma yüzdesi (gereksinim bulunamadıysa tanımsız) */
+  /** Worldwide remote doğrulaması: kanıtlar, kısıtlar ve durum */
+  remoteVerification?: {
+    status: 'confirmed' | 'likely' | 'unverified' | 'restricted' | 'not_remote';
+    evidence: string[];
+    restrictions: string[];
+    cautions: string[];
+    summary: string;
+  };
+  matchScore?: number;
+  /** İlan metninde karşılaştırılabilir gereksinim bulundu mu? (kısa/boş ilanlarda false) */
+  requirementsAssessed?: boolean;
+  requirements?: {
+    kind: 'skill' | 'years' | 'cert' | 'language';
+    label: string;
+    level: 'required' | 'preferred';
+    met: boolean | 'unknown';
+    critical: boolean;
+    detail?: string;
+  }[];
   analyzedAt: string;
 }
 
